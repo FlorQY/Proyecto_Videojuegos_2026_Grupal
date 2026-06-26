@@ -1,14 +1,14 @@
 import pygame
 import psutil
 import os
+import time
 
-# Constantes de colores
+# Colores y constantes
 BACKGROUND = (120, 0, 0)
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 GRAY = (40, 40, 40)
 
-# Mapa de colores para las cartas
 CARD_COLORS = {
     "Red": (220, 50, 50),
     "Blue": (50, 80, 220),
@@ -19,38 +19,36 @@ CARD_COLORS = {
 
 
 def draw_game(screen, game, clock):
-    """Dibuja todo el juego en la pantalla."""
-    # Fuente
     font = pygame.font.SysFont("arial", 30)
 
-    # --- Fondo ---
+    # Fondo
     screen.fill(BACKGROUND)
 
-    # --- Título y turno ---
+    # Título y turno
     title = font.render("UNO NO MERCY", True, WHITE)
     turn_text = font.render(f"TURN: {game.current_turn}", True, WHITE)
     screen.blit(title, (20, 20))
     screen.blit(turn_text, (20, 60))
 
-    # --- Zona central (círculo decorativo) ---
+    # Círculo decorativo central
     pygame.draw.circle(screen, (180, 120, 0), (640, 360), 130, 12)
 
-    # --- Carta central ---
+    # Carta central
     center_color = CARD_COLORS.get(game.center_card.color, (100, 100, 100))
     pygame.draw.rect(screen, center_color, (590, 285, 100, 150), border_radius=10)
     pygame.draw.rect(screen, WHITE, (590, 285, 100, 150), 3, border_radius=10)
     center_text = font.render(f"{game.center_card.value}", True, WHITE)
     screen.blit(center_text, (632, 340))
 
-    # --- Mazo ---
+    # Mazo
     deck_rect = pygame.Rect(280, 150, 100, 150)
     pygame.draw.rect(screen, BLACK, deck_rect, border_radius=10)
     deck_text = font.render("UNO", True, WHITE)
     screen.blit(deck_text, (300, 210))
-    # Guardamos el rect en el game para usarlo en eventos (opcional)
-    game._deck_rect = deck_rect  # Truco para que handle_event lo use
+    # Guardamos el rect para usarlo en eventos (desde game)
+    game._deck_rect = deck_rect
 
-    # --- Nombres de los bots (con color según turno) ---
+    # Nombres de los bots (con color según turno)
     bot_colors = [WHITE, WHITE, WHITE]
     if game.current_turn == 1:
         bot_colors[0] = (255, 220, 0)
@@ -66,7 +64,7 @@ def draw_game(screen, game, clock):
     screen.blit(bot2, (800, 80))
     screen.blit(bot3, (1160, 300))
 
-    # --- Cartas de los bots (dorsos) ---
+    # Cartas de los bots (dorsos)
     # Bot 2 (arriba, horizontal)
     x_bot2 = 450
     for _ in game.players[2].hand:
@@ -88,7 +86,7 @@ def draw_game(screen, game, clock):
         pygame.draw.rect(screen, WHITE, (1050, y_bot3, 60, 90), 2, border_radius=10)
         y_bot3 += 25
 
-    # --- Cartas del jugador (abajo) ---
+    # Cartas del jugador (abajo)
     player = game.players[0]
     x = 300
     for card in player.hand:
@@ -103,18 +101,21 @@ def draw_game(screen, game, clock):
         screen.blit(value_text, (x + 40, 575))
         x += 95
 
-    # --- Botón UNO (solo visual, funcionalidad futura) ---
+    # Botón UNO (visual)
     pygame.draw.circle(screen, (220, 40, 40), (1180, 620), 45)
     pygame.draw.circle(screen, WHITE, (1180, 620), 45, 4)
     uno_text = font.render("UNO", True, WHITE)
     screen.blit(uno_text, (1153, 603))
 
-    # --- Ganador ---
+    # Ganador
     if game.winner is not None:
         winner_text = font.render(f"{game.winner.name} WINS!", True, WHITE)
         screen.blit(winner_text, (560, 180))
 
-    # --- Métricas técnicas ---
+    # 🔥 Indicador de penalización pendiente
+    draw_pending_penalty(screen, game, font)
+
+    # Métricas técnicas
     fps = clock.get_fps()
     if fps > 0:
         frame_time = 1000 / fps
@@ -126,7 +127,37 @@ def draw_game(screen, game, clock):
     fps_text = font.render(f"FPS: {fps:.1f}", True, WHITE)
     frame_text = font.render(f"Frame: {frame_time:.2f} ms", True, WHITE)
     ram_text = font.render(f"RAM: {ram_mb:.1f} MB", True, WHITE)
-
     screen.blit(fps_text, (950, 20))
     screen.blit(frame_text, (950, 50))
     screen.blit(ram_text, (950, 80))
+
+
+def draw_pending_penalty(screen, game, font):
+    """
+    Dibuja un indicador visual de la penalización pendiente sobre el jugador afectado.
+    Parpadea usando time.time().
+    """
+    if game.pending_draws > 0 and game.pending_victim is not None:
+        # Posición según el jugador afectado (usamos el índice)
+        if game.pending_victim == 0:  # Jugador humano
+            x, y = 640, 680
+        elif game.pending_victim == 1:  # Bot 1 (izquierda)
+            x, y = 80, 350
+        elif game.pending_victim == 2:  # Bot 2 (arriba)
+            x, y = 640, 50
+        else:  # Bot 3 (derecha)
+            x, y = 1200, 350
+
+        # Texto con el número de cartas a robar
+        text = f"¡+{game.pending_draws}!"
+        penalty_text = font.render(text, True, (255, 0, 0))  # Rojo intenso
+        text_rect = penalty_text.get_rect(center=(x, y))
+
+        # Efecto de parpadeo (cada 0.5 segundos)
+        if int(time.time() * 2) % 2 == 0:
+            # Fondo semitransparente para resaltar
+            s = pygame.Surface(text_rect.inflate(20, 10).size, pygame.SRCALPHA)
+            s.fill((0, 0, 0, 180))
+            screen.blit(s, text_rect.inflate(20, 10).topleft)
+            # Dibujar el texto
+            screen.blit(penalty_text, text_rect)

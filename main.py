@@ -20,17 +20,17 @@ def main():
     while running:
         dt = clock.tick(60) / 1000.0  # Delta time en segundos (no usado aún)
 
-        # --- Eventos ---
+        # Eventos
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             # Pasar el evento al juego
             game.handle_event(event)
 
-        # --- Actualización ---
+        # Actualización
         game.update(dt)
 
-        # --- Dibujo ---
+        # Dibujo
         draw_game(screen, game, clock)
 
         pygame.display.flip()
