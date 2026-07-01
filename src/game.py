@@ -1,12 +1,27 @@
 import pygame
 from src.deck import Deck
 from src.player import Player
-from src.rules import is_valid_play, get_effect
+from src.rules import is_valid_play
+from src.turn_manager import advance_turn, check_winner
+from src.penalty_manager import (
+    apply_pending_penalty,
+    bot_respond_to_penalty,
+    get_penalty_cards,
+)
+from src.action_manager import (
+    play_card,
+    play_drawn_card,
+    keep_drawn_card,
+    select_color,
+    apply_color_and_continue,
+    apply_swap,
+)
+from src.bot_manager import bot_play
 
 
 class Game:
     def __init__(self):
-        print("🔍 [GAME] Inicializando partida...")
+        print("[GAME] Inicializando partida...")
         self.deck = Deck()
         self.players = [
             Player("Tú", is_human=True),
@@ -27,202 +42,225 @@ class Game:
         self.winner = None
         self.game_state = "PLAYING"
         self.bot_timer = 0
-        self.drawn_card_temp = None
 
         # Acumulación
         self.pending_draws = 0
         self.pending_victim = None
 
-        print("🔍 [GAME] Partida iniciada. Jugadores:", [p.name for p in self.players])
-        print(f"🔍 [GAME] Carta central: {self.center_card}")
+        # Robo con decisión
+        self.waiting_for_decision = False
+        self.drawn_card_temp = None
+        self.decision_timer = 0.0
+        self.decision_timeout = 5.0
+
+        self.btn_play_rect = None
+        self.btn_keep_rect = None
+
+        # Respuesta a penalización
+        self.waiting_for_penalty_response = False
+        self.penalty_response_timer = 0.0
+        self.penalty_response_timeout = 5.0
+        self.penalty_card_rects = []
+        self.penalty_card_indices = []
+        self.btn_rob_rect = None
+
+        # Selección de color
+        self.pending_color_card = None
+        self.pending_color_player = None
+        self.pending_color_callback = None
+        self.color_rects = []
+        self.selection_timer = 0.0
+        self.selection_timeout = 5.0
+
+        # Selección de oponente (carta 7)
+        self.pending_swap_player = None
+        self.opponent_rects = []
+        self.opponent_indices = []
+
+        print("[GAME] Partida iniciada. Jugadores:", [p.name for p in self.players])
+        print(f"[GAME] Carta central: {self.center_card}")
 
     # ------------------------------------------------------------
-    #  Métodos auxiliares de turnos
-    # ------------------------------------------------------------
-    def _get_next_turn(self):
-        next_turn = self.current_turn + self.direction
-        if next_turn > 3:
-            next_turn = 0
-        elif next_turn < 0:
-            next_turn = 3
-        return next_turn
-
-    def _advance_turn(self):
-        old = self.current_turn
-        self.current_turn = self._get_next_turn()
-        print(
-            f"🔍 [TURNO] Avanzando: {old} -> {self.current_turn} (dir={self.direction})"
-        )
-
-    # ------------------------------------------------------------
-    #  Robo y mazo
+    #  Robo y mazo (se mantienen en game)
     # ------------------------------------------------------------
     def _apply_draw_penalty(self, hand, amount):
-        print(f"🔍 [ROBO] Robando {amount} cartas para {hand}...")
+        print(f"[ROBO] Robando {amount} cartas...")
         for _ in range(amount):
             card = self.deck.draw_card()
             if card is None:
-                print("🔍 [ROBO] Mazo vacío, no se pudo robar.")
+                print("[ROBO] Mazo vacío, no se pudo robar.")
                 break
             hand.append(card)
-        print(f"🔍 [ROBO] Mano ahora tiene {len(hand)} cartas.")
+        print(f"[ROBO] Mano ahora tiene {len(hand)} cartas.")
 
     def _reshuffle_discard(self):
-        # Placeholder
-        pass
+        pass  # Se implementará en bloque futuro
 
     # ------------------------------------------------------------
-    #  Verificación de ganador
+    #  Métodos wrapper (delegan en los managers)
     # ------------------------------------------------------------
+    def _get_next_turn(self):
+        from src.turn_manager import get_next_turn
+
+        return get_next_turn(self)
+
+    def _advance_turn(self):
+        advance_turn(self)
+
     def _check_winner(self):
-        for player in self.players:
-            if len(player.hand) == 0:
-                self.winner = player
-                self.game_state = "GAME_OVER"
-                print(f"🔍 [VICTORIA] ¡{player.name} ha ganado!")
-                return True
-        return False
+        return check_winner(self)
 
-    # ------------------------------------------------------------
-    #  🔥 Acumulación de penalizaciones
-    # ------------------------------------------------------------
     def _apply_attack(self, amount, reverse=False):
-        victim_index = self._get_next_turn()
-        print(
-            f"🔍 [ATAQUE] Jugador {self.current_turn} ataca con +{amount} a {victim_index} (reverse={reverse})"
-        )
+        from src.penalty_manager import apply_attack
 
-        if self.pending_draws > 0 and self.pending_victim == victim_index:
-            self.pending_draws += amount
-            print(f"🔍 [ACUMULADO] Se acumula: total ahora {self.pending_draws}")
-        else:
-            if self.pending_draws > 0:
-                print(
-                    f"🔍 [ACUMULADO] Había penalización para {self.pending_victim}, se aplica ahora"
-                )
-                self._apply_pending_penalty()
-            self.pending_draws = amount
-            self.pending_victim = victim_index
-            print(
-                f"🔍 [ACUMULADO] Nueva penalización: {self.pending_draws} para {self.pending_victim}"
-            )
-
-        if reverse:
-            self.direction *= -1
-            print(f"🔍 [REVERSE] Dirección invertida: {self.direction}")
+        apply_attack(self, amount, reverse)
 
     def _apply_pending_penalty(self):
-        if self.pending_draws > 0 and self.pending_victim is not None:
-            print(
-                f"🔍 [PENALIZACIÓN] Aplicando {self.pending_draws} cartas a {self.players[self.pending_victim].name}"
-            )
-            victim = self.players[self.pending_victim]
-            self._apply_draw_penalty(victim.hand, self.pending_draws)
-            self.pending_draws = 0
-            self.pending_victim = None
-            print(
-                "🔍 [PENALIZACIÓN] Penalización aplicada y reseteada. Saltando turno."
-            )
-            self._advance_turn()
+        apply_pending_penalty(self)
 
-    # ------------------------------------------------------------
-    #  Aplicación de efectos de cartas
-    # ------------------------------------------------------------
+    def _get_penalty_cards(self, player):
+        return get_penalty_cards(self, player)
+
+    def _respond_to_penalty(self, card_index):
+        from src.penalty_manager import respond_to_penalty
+
+        respond_to_penalty(self, card_index)
+
+    def _bot_respond_to_penalty(self):
+        bot_respond_to_penalty(self)
+
+    def _select_color(self, player, card, callback_type):
+        select_color(self, player, card, callback_type)
+
+    def _apply_color_and_continue(self, chosen_color):
+        apply_color_and_continue(self, chosen_color)
+
+    def _rotate_hands(self):
+        from src.action_manager import rotate_hands
+
+        rotate_hands(self)
+
+    def _select_opponent(self, player):
+        from src.action_manager import select_opponent
+
+        select_opponent(self, player)
+
+    def _apply_swap(self, player1, player2):
+        apply_swap(self, player1, player2)
+
     def _apply_effect(self, player, card):
-        effect = get_effect(card)
-        print(
-            f"🔍 [EFECTO] Carta {card.value} jugada por {player.name}, efecto={effect}"
-        )
+        from src.action_manager import apply_effect
 
-        if effect == "Reverse":
-            self.direction *= -1
-            print(f"🔍 [REVERSE] Dirección ahora {self.direction}")
-            return False
+        return apply_effect(self, player, card)
 
-        elif effect == "Skip":
-            self._advance_turn()
-            return True
-
-        elif effect in ["+2", "+4", "+6", "+10"]:
-            amount = int(effect)
-            self._apply_attack(amount, reverse=False)
-            return False
-
-        elif effect == "+4 Reverse":
-            self._apply_attack(4, reverse=True)
-            return False
-
-        return False
-
-    # ------------------------------------------------------------
-    #  Jugar una carta
-    # ------------------------------------------------------------
     def _play_card(self, player, card_index):
-        if card_index >= len(player.hand):
-            return False
+        return play_card(self, player, card_index)
 
-        card = player.hand[card_index]
-        if not is_valid_play(card, self.center_card):
-            print(f"🔍 [JUGADA] {player.name} intentó jugar {card} pero no es válida.")
-            return False
+    def _play_drawn_card(self):
+        return play_drawn_card(self)
 
-        print(f"🔍 [JUGADA] {player.name} juega {card}")
-        player.play_card(card_index)
-        self.center_card = card
+    def _keep_drawn_card(self):
+        keep_drawn_card(self)
 
-        if card.color == "Wild":
-            card.color = "Red"  # temporal
-
-        turn_modified = self._apply_effect(player, card)
-
-        if self._check_winner():
-            return True
-
-        if not turn_modified:
-            self._advance_turn()
-
-        return True
-
-    # ------------------------------------------------------------
-    #  Lógica de bots
-    # ------------------------------------------------------------
     def _bot_play(self, player):
-        print(f"🔍 [BOT] Turno de {player.name}")
-        valid_indices = []
-        for i, card in enumerate(player.hand):
-            if is_valid_play(card, self.center_card):
-                valid_indices.append(i)
-
-        if valid_indices:
-            # Elige la primera carta válida
-            index = valid_indices[0]
-            print(f"🔍 [BOT] {player.name} juega {player.hand[index]}")
-            self._play_card(player, index)
-        else:
-            print(f"🔍 [BOT] {player.name} no tiene carta válida, roba.")
-            if len(self.deck.cards) > 0:
-                player.draw_card(self.deck)
-            self._advance_turn()
+        bot_play(self, player)
 
     # ------------------------------------------------------------
     #  Eventos (solo jugador humano)
     # ------------------------------------------------------------
     def handle_event(self, event):
-        if self.game_state != "PLAYING":
+        if self.game_state == "GAME_OVER":
             return
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
+
             if self.current_turn != 0:
                 return
 
             player = self.players[0]
 
+            # Selección de color
+            if self.game_state == "SELECTING_COLOR":
+                for rect, color in self.color_rects:
+                    if rect.collidepoint(mouse_pos):
+                        print(f"[COLOR] Jugador eligió {color}")
+                        self._apply_color_and_continue(color)
+                        return
+                return
+
+            # Selección de oponente
+            if self.game_state == "SELECTING_OPPONENT":
+                for rect, idx in zip(self.opponent_rects, self.opponent_indices):
+                    if rect.collidepoint(mouse_pos):
+                        opponent = self.players[idx]
+                        print(f"[INTERCAMBIO] Jugador eligió a {opponent.name}")
+                        self._apply_swap(player, opponent)
+                        self._advance_turn()
+                        return
+                return
+
+            # Respuesta a penalización
+            if self.waiting_for_penalty_response:
+                for i, rect in enumerate(self.penalty_card_rects):
+                    if rect.collidepoint(mouse_pos):
+                        card_index = self.penalty_card_indices[i]
+                        self._respond_to_penalty(card_index)
+                        return
+
+                if self.btn_rob_rect is not None and self.btn_rob_rect.collidepoint(
+                    mouse_pos
+                ):
+                    print("[RESPUESTA] Jugador elige robar.")
+                    self._apply_pending_penalty()
+                    self.waiting_for_penalty_response = False
+                    self.penalty_response_timer = 0.0
+                    self.penalty_card_rects = []
+                    self.penalty_card_indices = []
+                    self.btn_rob_rect = None
+                    return
+                return
+
+            # Robo con decisión
+            if self.waiting_for_decision:
+                if self.btn_play_rect is not None and self.btn_play_rect.collidepoint(
+                    mouse_pos
+                ):
+                    if is_valid_play(self.drawn_card_temp, self.center_card):
+                        self._play_drawn_card()
+                    else:
+                        print("[DECISION] La carta no es valida, no se puede jugar.")
+                    return
+
+                if self.btn_keep_rect is not None and self.btn_keep_rect.collidepoint(
+                    mouse_pos
+                ):
+                    self._keep_drawn_card()
+                    return
+                return
+
+            # Comportamiento normal: clic en mazo o en carta
             deck_rect = pygame.Rect(280, 150, 100, 150)
             if deck_rect.collidepoint(mouse_pos):
                 if len(self.deck.cards) > 0:
-                    player.draw_card(self.deck)
-                    self._advance_turn()
+                    # 🔥 CORRECCIÓN: Obtener carta del mazo SIN añadir a la mano aún
+                    card = (
+                        self.deck.draw_card()
+                    )  # draw_card retira la carta del mazo, no la añade a la mano
+                    if card is not None:
+                        self.drawn_card_temp = card
+                        self.waiting_for_decision = True
+                        self.decision_timer = 0.0
+                        valida = (
+                            "válida"
+                            if is_valid_play(card, self.center_card)
+                            else "no válida"
+                        )
+                        print(
+                            f"[ROBO] Has robado: {card} ({valida}). Decide: JUGAR o GUARDAR."
+                        )
+                else:
+                    print("[ROBO] Mazo vacio.")
                 return
 
             for i, card in enumerate(player.hand):
@@ -234,18 +272,76 @@ class Game:
     #  Update (se llama cada frame)
     # ------------------------------------------------------------
     def update(self, dt):
-        if self.game_state != "PLAYING":
+        if self.game_state == "GAME_OVER":
             return
 
-        # 1. Aplicar penalización pendiente si corresponde
+        # Temporizador selección de color
+        if self.game_state == "SELECTING_COLOR":
+            self.selection_timer += dt
+            if self.selection_timer >= self.selection_timeout:
+                print("[COLOR] Tiempo agotado. Eligiendo Rojo por defecto.")
+                self._apply_color_and_continue("Red")
+                return
+
+        # Temporizador selección de oponente
+        if self.game_state == "SELECTING_OPPONENT":
+            self.selection_timer += dt
+            if self.selection_timer >= self.selection_timeout:
+                player = self.pending_swap_player
+                opponents = [p for p in self.players if p is not player]
+                chosen = min(opponents, key=lambda p: len(p.hand))
+                print(f"[INTERCAMBIO] Tiempo agotado. Intercambiando con {chosen.name}")
+                self._apply_swap(player, chosen)
+                self._advance_turn()
+                return
+
+        # Penalización pendiente
         if self.pending_draws > 0 and self.pending_victim == self.current_turn:
-            print(
-                f"🔍 [UPDATE] Jugador {self.current_turn} tiene penalización pendiente."
-            )
-            self._apply_pending_penalty()
-            return
+            player = self.players[self.current_turn]
+            penalty_cards = self._get_penalty_cards(player)
 
-        # 2. Turno de bot
+            if player.is_human:
+                if penalty_cards:
+                    if not self.waiting_for_penalty_response:
+                        print(
+                            f"[RESPUESTA] Jugador {self.current_turn} puede responder a la penalización."
+                        )
+                        self.waiting_for_penalty_response = True
+                        self.penalty_response_timer = 0.0
+                    else:
+                        self.penalty_response_timer += dt
+                        if self.penalty_response_timer >= self.penalty_response_timeout:
+                            print(
+                                "[RESPUESTA] Tiempo agotado. Robando automáticamente."
+                            )
+                            self._apply_pending_penalty()
+                            self.waiting_for_penalty_response = False
+                            self.penalty_response_timer = 0.0
+                            self.penalty_card_rects = []
+                            self.penalty_card_indices = []
+                            self.btn_rob_rect = None
+                    return
+                else:
+                    print(
+                        f"[UPDATE] Jugador {self.current_turn} no tiene cartas de penalización."
+                    )
+                    self._apply_pending_penalty()
+                    return
+            else:
+                self._bot_respond_to_penalty()
+                return
+
+        # Temporizador de decisión (robo voluntario)
+        if self.waiting_for_decision and self.current_turn == 0:
+            self.decision_timer += dt
+            if self.decision_timer >= self.decision_timeout:
+                print(
+                    f"[DECISION] Tiempo agotado ({self.decision_timeout}s). Guardando automaticamente."
+                )
+                self._keep_drawn_card()
+                return
+
+        # Turno de bot
         if self.current_turn != 0 and self.winner is None:
             self.bot_timer += 1
             if self.bot_timer >= 60:
