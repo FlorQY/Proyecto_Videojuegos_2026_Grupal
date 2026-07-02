@@ -10,7 +10,7 @@ Pantallas emergentes (overlays) para decisiones del jugador:
 import pygame
 import time
 
-# Importar constantes y colores desde ui.py (para evitar duplicación)
+# Importar constantes y colores desde ui.py
 from src.ui import (
     WHITE,
     BLACK,
@@ -18,9 +18,9 @@ from src.ui import (
     GREEN,
     RED,
     YELLOW,
-    CARD_COLORS,
     COLOR_DISPLAY,
     is_valid_play,
+    draw_card,
 )
 
 
@@ -35,29 +35,18 @@ def draw_decision_overlay(screen, game, font, font_small):
     card_width = 90
     card_height = 140
 
-    # Sombra
-    shadow_rect = pygame.Rect(draw_x + 5, draw_y + 5, card_width, card_height)
-    pygame.draw.rect(screen, BLACK, shadow_rect, border_radius=10)
-
-    # Carta
-    card_color = CARD_COLORS.get(card.color, (100, 100, 100))
-    pygame.draw.rect(
+    draw_card(
         screen,
-        card_color,
-        (draw_x, draw_y, card_width, card_height),
+        card,
+        draw_x,
+        draw_y,
+        card_width,
+        card_height,
         border_radius=10,
+        border_width=0,
+        shadow=True,
     )
-    pygame.draw.rect(
-        screen,
-        WHITE,
-        (draw_x, draw_y, card_width, card_height),
-        3,
-        border_radius=10,
-    )
-    value_text = font.render(card.value, True, WHITE)
-    screen.blit(value_text, (draw_x + 40, draw_y + 50))
 
-    # Botones
     btn_width = 120
     btn_height = 50
     play_rect = pygame.Rect(460, 560, btn_width, btn_height)
@@ -112,17 +101,14 @@ def draw_penalty_response_overlay(screen, game, font, font_big, font_small):
     x_start = 320
     y_cards = 320
     spacing = 110
+
     for idx, (card_index, card) in enumerate(penalty_cards):
         x = x_start + idx * spacing
         rect = pygame.Rect(x, y_cards, 80, 120)
         game.penalty_card_rects.append(rect)
         game.penalty_card_indices.append(card_index)
 
-        card_color = CARD_COLORS.get(card.color, (100, 100, 100))
-        pygame.draw.rect(screen, card_color, rect, border_radius=8)
-        pygame.draw.rect(screen, WHITE, rect, 2, border_radius=8)
-        value_text = font.render(card.value, True, WHITE)
-        screen.blit(value_text, (x + 20, y_cards + 45))
+        draw_card(screen, card, x, y_cards, 80, 120, border_radius=8, border_width=2)
 
     rob_rect = pygame.Rect(560, 480, 160, 50)
     game.btn_rob_rect = rob_rect
