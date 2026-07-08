@@ -1,4 +1,5 @@
 import pygame
+import os
 from src.deck import Deck
 from src.player import Player
 from src.rules import is_valid_play
@@ -17,10 +18,25 @@ from src.action_manager import (
     apply_swap,
 )
 from src.bot_manager import bot_play
-
+from src.uno_manager import (
+    update_uno,
+    declare_uno,
+    apply_uno_penalty,
+)
 
 class Game:
     def __init__(self):
+        # -------------------------
+        # Sonidos
+        # -------------------------
+        ruta_uno = os.path.join("assets", "sounds", "uno.wav")
+
+        try:
+            self.uno_sound = pygame.mixer.Sound(ruta_uno)
+            print("[SONIDO] uno.wav cargado correctamente.")
+        except Exception as e:
+            print(f"[SONIDO] Error cargando uno.wav: {e}")
+            self.uno_sound = None
         print("[GAME] Inicializando partida...")
         self.deck = Deck()
         self.players = [
@@ -42,7 +58,32 @@ class Game:
         self.winner = None
         self.game_state = "PLAYING"
         self.bot_timer = 0
-
+        
+        # Sistema UNO       
+        self.uno_player = None          # jugador con una carta
+        self.uno_predeclared = False   # Pulsó UNO antes de jugar
+        self.uno_declared = False      # Ya quedó protegido 
+        self.uno_timer = 0.0            # tiempo transcurrido
+        self.uno_timeout = 3.0          # segundos para decir UNO
+        self.uno_window_open = False    # la ventana está activa
+        self.uno_button_rect = None     # área clickeable del botón UNO
+        self.uno_event_active = False
+        
+        # Denuncia de UNO
+        self.denounce_player = None
+        self.denounce_timer = 0.0
+        self.denounce_timeout = 2.5
+        self.denounce_window_open = False
+        self.btn_denounce_rect = None
+        
+        # Denuncia automática de bots
+        self.bot_denounced = False #evita que varios bots denuncien al mismo tiempo
+        self.bot_denounce_delay = 0.8 #Tiempo de reacción de los bots
+        
+        #botón uno
+        self.uno_button_pressed = False
+        self.uno_button_timer = 0.0 
+                
         # Acumulación
         self.pending_draws = 0
         self.pending_victim = None
@@ -164,7 +205,7 @@ class Game:
 
     def _bot_play(self, player):
         bot_play(self, player)
-
+        
     # ------------------------------------------------------------
     #  Eventos (solo jugador humano)
     # ------------------------------------------------------------
@@ -174,8 +215,33 @@ class Game:
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
+            
+            # Botón UNO
+            if (
+                self.uno_button_rect is not None
+                and self.uno_button_rect.collidepoint(mouse_pos)
+            ):
+                self.uno_button_pressed = True
+                self.uno_button_timer = 0.12
+
+                declare_uno(self)
+                return
 
             if self.current_turn != 0:
+                
+                # Denunciar UNO
+                if self.denounce_window_open:
+
+                    if (
+                        self.btn_denounce_rect is not None
+                        and self.btn_denounce_rect.collidepoint(mouse_pos)
+                    ):
+
+                        print(f"[UNO] Denunciaste a {self.denounce_player.name}")
+
+                        apply_uno_penalty(self)
+
+                        return
                 return
 
             player = self.players[0]
@@ -275,6 +341,16 @@ class Game:
         if self.game_state == "GAME_OVER":
             return
 
+        update_uno(self, dt)
+        
+        # Animación del botón UNO
+        if self.uno_button_pressed:
+            self.uno_button_timer -= dt
+
+            if self.uno_button_timer <= 0:
+                self.uno_button_pressed = False
+                self.uno_button_timer = 0.0
+                
         # Temporizador selección de color
         if self.game_state == "SELECTING_COLOR":
             self.selection_timer += dt
@@ -348,6 +424,10 @@ class Game:
                 bot = self.players[self.current_turn]
                 self._bot_play(bot)
                 self.bot_timer = 0
+                
+    def play_uno_sound(self):
+        if self.uno_sound is not None:
+            self.uno_sound.play()
 
     def reset(self):
         self.__init__()

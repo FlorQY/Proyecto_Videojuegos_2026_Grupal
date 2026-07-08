@@ -23,7 +23,6 @@ from src.ui import (
     draw_card,
 )
 
-
 def draw_decision_overlay(screen, game, font, font_small):
     """Dibuja la carta robada separada con botones JUGAR / GUARDAR."""
     if not (game.waiting_for_decision and game.drawn_card_temp is not None):
@@ -221,3 +220,100 @@ def draw_pending_penalty(screen, game, font):
             s.fill((0, 0, 0, 180))
             screen.blit(s, text_rect.inflate(20, 10).topleft)
             screen.blit(penalty_text, text_rect)
+            
+def draw_uno_report_overlay(screen, game):
+    if not game.denounce_window_open:
+        return
+    
+    overlay = pygame.Surface((1280, 720), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 160))
+    screen.blit(overlay, (0, 0))
+
+    box = pygame.Rect(390, 180, 500, 280)
+
+    pygame.draw.rect(screen, (245,245,245), box, border_radius=15)
+    pygame.draw.rect(screen, (40,40,40), box, 3, border_radius=15)
+    
+    font_title = pygame.font.SysFont("arial", 34, bold=True)
+    font = pygame.font.SysFont("arial", 26)
+    
+    text = font_title.render("¡¡DENUNCIA!!", True, (200,30,30))
+    screen.blit(text, text.get_rect(center=(640,230)))
+    
+    player_text = font.render(
+    f"{game.denounce_player.name} olvidó decir UNO",
+    True,
+    (20,20,20)
+    )
+
+    screen.blit(player_text, player_text.get_rect(center=(640,290)))
+    
+    remaining = max(
+    0,
+    game.denounce_timeout - game.denounce_timer
+    )
+    timer = font.render(
+        f"Tiempo: {remaining:.1f}s",
+        True,
+        (20,20,20)
+    )
+
+    screen.blit(timer, timer.get_rect(center=(640,340)))
+    
+    game.btn_denounce_rect = pygame.Rect(540, 390, 200, 60)
+    
+    pygame.draw.rect(
+    screen,
+    (210,60,60),
+    game.btn_denounce_rect,
+    border_radius=10
+    )
+
+    pygame.draw.rect(
+        screen,
+        (40,40,40),
+        game.btn_denounce_rect,
+        2,
+        border_radius=10
+    )
+    
+    txt = font.render("DENUNCIAR", True, (255,255,255))
+
+    screen.blit(
+        txt,
+        txt.get_rect(center=game.btn_denounce_rect.center)
+    )
+
+def draw_uno_popup(screen, game):
+    """
+    Dibuja el globo 'UNO!' sobre cualquier jugador que:
+    - haya dicho UNO
+    - y todavía tenga exactamente una carta.
+    """
+
+    positions = {
+        0: (140, 580),    # Tú
+        1: (45, 340),     # Bot 1
+        2: (290, 60),    # Bot 2
+        3: (1160, 340),   # Bot 3
+    }
+
+    font = pygame.font.SysFont("arial", 24, bold=True)
+
+    for i, player in enumerate(game.players):
+
+        if not player.uno_said:
+            continue
+
+        if len(player.hand) != 1:
+            continue
+
+        x, y = positions[i]
+
+        bubble = pygame.Rect(x, y, 85, 40)
+
+        pygame.draw.ellipse(screen, (255, 255, 255), bubble)
+        pygame.draw.ellipse(screen, (40, 40, 40), bubble, 3)
+
+        text = font.render("UNO!", True, (0, 0, 0))
+        screen.blit(text, text.get_rect(center=bubble.center))

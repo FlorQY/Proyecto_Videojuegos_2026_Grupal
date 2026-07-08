@@ -189,7 +189,7 @@ def play_card(game, player, card_index):
     # Otras cartas
     game.center_card = card
     turn_modified = apply_effect(game, player, card)
-
+    
     if check_winner(game):
         return True
 
@@ -242,3 +242,4 @@ def keep_drawn_card(game):
     game.waiting_for_decision = False
     game.decision_timer = 0.0
     advance_turn(game)
+    

@@ -11,7 +11,7 @@ El desarrollo se realiza utilizando Python y la librería Pygame, implementando 
 
 ## Características planeadas
 
-- Sistema de turnos
+- Sistema de turnos avanzado
 - Cartas numéricas y especiales
 - Mecánica de acumulación de robo de cartas
 - Cambio de color y comodines
@@ -37,25 +37,26 @@ Actualmente el proyecto cuenta con:
 - Robo de cartas desde el mazo
 - Carta central dinámica
 - Detección de victoria
-- Indicador visual del jugador en turno
+- Indicador visual del jugador en turno (de forma simple)
 - Cambio de dirección (Reverse)
 - Bloqueo de turno (Skip)
-- Penalizaciones de robo (+2, +4, +4 Reverse, +6 y +10)
-- Mazo ampliado con cartas numéricas, de acción y comodines de UNO No Mercy
+- Robo y acumulación de penalizaciones (+2, +4, +6, +10 y +4 Reverse)
+- Mazo ampliado con cartas numéricas, de acción y comodines de UNO No Mercy (168 cartas)
 - Interfaz gráfica inicial en 2D
+- Comodines jugables en cualquier momento (implementación parcial)
+- Selección de color para cartas comodín (implementación parcial)
+- Rotación e intercambio de manos (0 y 7)
+- Sistema UNO(botón) y penalizaciones
+- Opción de jugar o conservar una carta recién robada
 
 ## Próximas funcionalidades
 
-- Acumulación de penalizaciones (+2, +4, +6, +10 y +4 Reverse)
-- Comodines jugables en cualquier momento
-- Selección de color para cartas comodín
+- Comodines jugables en cualquier momento (implementación total)
+- Selección de color para cartas comodín (implementación total)
 - Carta Sad (carita triste)
-- Rotación e intercambio de manos (0 y 7)
-- Sistema UNO y penalizaciones
 - Temporizador por turno
-- Opción de jugar o conservar una carta recién robada
-- Mejoras en la inteligencia artificial de los bots
+- Mejoras en la inteligencia artificial de los bots avanzada
 - Sistema de monedas y apuestas
 - Sistema de ligas
-- Mejoras visuales y assets gráficos
+- Mejoras visuales y assets gráficos (implementación total)
 

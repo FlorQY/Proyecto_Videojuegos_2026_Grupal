@@ -3,6 +3,7 @@ Gestión de turnos y verificación de ganador.
 Todas las funciones reciben `game` como primer argumento.
 """
 
+from src.uno_manager import check_uno
 
 def get_next_turn(game):
     """Calcula el siguiente índice de jugador según la dirección."""
@@ -15,6 +16,10 @@ def get_next_turn(game):
 
 
 def advance_turn(game):
+    
+    # Antes de cambiar el turno revisamos si alguien quedó con una carta
+    check_uno(game)
+    
     old = game.current_turn
     game.current_turn = get_next_turn(game)
     print(f"[TURNO] Avanzando: {old} -> {game.current_turn} (dir={game.direction})")

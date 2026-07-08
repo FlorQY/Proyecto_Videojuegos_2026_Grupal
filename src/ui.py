@@ -7,6 +7,10 @@ from src.sprite_loader import get_scaled_sprite
 _textura_fondo = None
 _textura_fondo_cargada = False
 
+#botón uno
+_uno_button = None
+_uno_button_cargado = False
+
 # Colores y constantes
 BACKGROUND = (120, 0, 0)
 BLACK = (0, 0, 0)
@@ -164,7 +168,38 @@ def cargar_textura_fondo():
         print("[UI] No se encontró png, usando color rojo por defecto.")
         _textura_fondo_cargada = True
 
+def cargar_boton_uno():
+    """Carga la imagen del botón UNO."""
+    global _uno_button, _uno_button_cargado
 
+    if _uno_button_cargado:
+        return
+
+    ruta = os.path.join("assets", "img", "uno_button.png")
+
+    if os.path.exists(ruta):
+
+        try:
+            img = pygame.image.load(ruta).convert_alpha()
+
+            # Tamaño del botón uno
+            _uno_button = pygame.transform.smoothscale(img, (150, 110))
+
+            _uno_button_cargado = True
+
+            print("[UI] Botón UNO cargado.")
+
+        except Exception as e:
+
+            print(f"[UI] Error cargando botón UNO: {e}")
+
+            _uno_button_cargado = True
+
+    else:
+
+        print("[UI] No se encontró uno_button.png")
+
+        _uno_button_cargado = True
 def draw_game(screen, game, clock):
     # PRINT DE DEPURACIÓN (solo una vez)
     if not hasattr(draw_game, "_init"):
@@ -173,8 +208,13 @@ def draw_game(screen, game, clock):
 
     # Cargar textura de fondo si no está cargada
     global _textura_fondo, _textura_fondo_cargada
+    global _uno_button, _uno_button_cargado
+
     if not _textura_fondo_cargada:
         cargar_textura_fondo()
+
+    if not _uno_button_cargado:
+        cargar_boton_uno()
 
     font = pygame.font.SysFont("arial", 30)
     font_small = pygame.font.SysFont("arial", 24)
@@ -256,6 +296,8 @@ def draw_game(screen, game, clock):
         draw_color_selection,
         draw_opponent_selection,
         draw_pending_penalty,
+        draw_uno_report_overlay,
+        draw_uno_popup,
     )
 
     draw_decision_overlay(screen, game, font, font_small)
@@ -267,11 +309,25 @@ def draw_game(screen, game, clock):
     if game.game_state == "SELECTING_OPPONENT":
         draw_opponent_selection(screen, game, font_big, font)
 
-    # Botón UNO (solo visual)
-    pygame.draw.circle(screen, (220, 40, 40), (1180, 620), 45)
-    pygame.draw.circle(screen, WHITE, (1180, 620), 45, 4)
-    uno_text = font.render("UNO", True, WHITE)
-    screen.blit(uno_text, (1153, 603))
+    # Botón UNO
+    game.uno_button_rect = pygame.Rect(1135, 575, 150, 110)
+
+    if _uno_button is not None:
+
+        if game.uno_button_pressed:
+
+            pressed = _uno_button.copy()
+
+            pressed.fill(
+                (180, 180, 180, 255),
+                special_flags=pygame.BLEND_RGBA_MULT
+            )
+
+            screen.blit(pressed, game.uno_button_rect.topleft)
+
+        else:
+
+            screen.blit(_uno_button, game.uno_button_rect.topleft)
 
     # Ganador
     if game.winner is not None:
@@ -280,7 +336,13 @@ def draw_game(screen, game, clock):
 
     # Penalización pendiente (indicador general)
     draw_pending_penalty(screen, game, font)
-
+    
+    # Ventana de denuncia UNO
+    draw_uno_report_overlay(screen, game)
+    
+    #globo de texto UNO!
+    draw_uno_popup(screen, game)
+      
     # Métricas
     fps = clock.get_fps()
     if fps > 0:

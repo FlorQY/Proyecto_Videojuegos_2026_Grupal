@@ -5,7 +5,7 @@ class Player:
         self.is_human = is_human
         self.uno_said = False
         self.skip_next_turn = False  # Para la carta Sad (futuro)
-
+        
     def draw_card(self, deck):
         """Roba una carta del mazo y la añade a la mano."""
         card = deck.draw_card()
