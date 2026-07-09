@@ -3,7 +3,9 @@ Sistema UNO:
 - Detectar cuando un jugador queda con una carta.
 - Manejar la ventana de tiempo para decir UNO.
 """
+
 from src.rules import is_valid_play
+
 
 def check_uno(game):
     """
@@ -12,7 +14,7 @@ def check_uno(game):
 
     if game.uno_event_active:
         return
-    
+
     for player in game.players:
 
         if len(player.hand) == 1:
@@ -24,64 +26,48 @@ def check_uno(game):
             game.uno_event_active = True
             game.uno_timer = 0.0
 
-            # Si el jugador ya había declarado UNO antes de jugar,
-            # queda protegido inmediatamente.
             if player.is_human and game.uno_predeclared:
-
                 game.uno_declared = True
                 game.uno_predeclared = False
                 game.uno_window_open = False
-
                 print("[UNO] Declaración anticipada válida.")
-
             else:
-
                 game.uno_declared = False
                 game.uno_window_open = True
-                
-                # -----------------------
-                # Bots pueden decir UNO
-                # -----------------------
-                if not player.is_human:
 
+                if not player.is_human:
                     import random
 
                     if random.random() < 0.80:
-
                         player.uno_said = True
                         game.play_uno_sound()
                         print(f"[UNO] {player.name} dijo UNO.")
-
                     else:
-
                         player.uno_said = False
                         print(f"[UNO] {player.name} olvidó decir UNO.")
-                
-                
+
             if game.uno_window_open and not player.uno_said:
                 start_report_window(game, player)
-                            
-            print(
-                f"[UNO] {player.name} tiene una carta. "
-                f"Tú:{len(game.players[0].hand)} "
-                f"Bot1:{len(game.players[1].hand)} "
-                f"Bot2:{len(game.players[2].hand)} "
-                f"Bot3:{len(game.players[3].hand)}"
-            )
+
+            # 🔥 CORRECCIÓN: mensaje dinámico sin índices fijos
+            manos_info = []
+            for p in game.players:
+                manos_info.append(f"{p.name}:{len(p.hand)}")
+            print(f"[UNO] {player.name} tiene una carta. " + " ".join(manos_info))
 
             return
-        
+
     for player in game.players:
         if len(player.hand) != 1:
             player.uno_said = False
 
-    # Nadie tiene exactamente una carta
     game.uno_player = None
     game.uno_event_active = False
     game.uno_window_open = False
-    
+
+
 def update_uno(game, dt):
-    
+
     # -------------------------
     # Ventana para declarar UNO
     # -------------------------
@@ -95,12 +81,12 @@ def update_uno(game, dt):
 
             if game.uno_player is not None:
                 print(f"[UNO] Tiempo agotado para {game.uno_player.name}")
-        
+
     # -------------------------
     # Ventana de denuncia
     # -------------------------
     if game.denounce_window_open:
-        
+
         game.denounce_timer += dt
 
         # ---------------------------------
@@ -132,12 +118,13 @@ def update_uno(game, dt):
 
             game.denounce_window_open = False
             game.denounce_player = None
-            
+
             game.uno_event_active = False
             game.uno_player = None
 
             print("[UNO] Tiempo de denuncia terminado.")
-        
+
+
 def start_report_window(game, player):
     game.denounce_player = player
     game.denounce_timer = 0.0
@@ -145,7 +132,8 @@ def start_report_window(game, player):
     game.bot_denounced = False
 
     print(f"[UNO] {player.name} puede ser denunciado.")
-    
+
+
 def apply_uno_penalty(game):
     """
     Aplica la penalización de +2 cartas al jugador denunciado.
@@ -171,9 +159,10 @@ def apply_uno_penalty(game):
     game.uno_declared = False
     game.uno_predeclared = False
     game.uno_timer = 0.0
-    
+
     game.uno_event_active = False
-    
+
+
 def declare_uno(game):
     """
     El jugador humano puede declarar UNO:
@@ -188,10 +177,7 @@ def declare_uno(game):
     # ---------------------------------
     if len(player.hand) == 2:
 
-        can_play = any(
-            is_valid_play(card, game.center_card)
-            for card in player.hand
-        )
+        can_play = any(is_valid_play(card, game.center_card) for card in player.hand)
 
         if not can_play:
             print("[UNO] No puedes declarar UNO: no tienes cartas jugables.")
@@ -201,7 +187,7 @@ def declare_uno(game):
         player.uno_said = True
         game.play_uno_sound()
         print("[UNO] Declaraste UNO antes de jugar.")
-                
+
         return
 
     # ---------------------------------
@@ -218,7 +204,7 @@ def declare_uno(game):
         game.denounce_window_open = False
         game.denounce_player = None
         game.denounce_timer = 0.0
-        
+
         game.uno_event_active = False
         game.uno_player = None
         player.uno_said = True
@@ -227,4 +213,3 @@ def declare_uno(game):
         return
 
     print("[UNO] No puedes declarar UNO en este momento.")
-    

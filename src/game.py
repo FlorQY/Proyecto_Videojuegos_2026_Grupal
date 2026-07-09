@@ -3,7 +3,7 @@ import os
 from src.deck import Deck
 from src.player import Player
 from src.rules import is_valid_play
-from src.turn_manager import advance_turn, check_winner
+from src.turn_manager import advance_turn, check_winner, check_pity
 from src.penalty_manager import (
     apply_pending_penalty,
     bot_respond_to_penalty,
@@ -17,7 +17,6 @@ from src.action_manager import (
     apply_color_and_continue,
     apply_swap,
     select_sad_target,
-    apply_sad_effect,
 )
 from src.bot_manager import bot_play
 from src.uno_manager import (
@@ -63,6 +62,10 @@ class Game:
         # Pila de descarte
         self.discard_pile = []
 
+        # Pausa post-acción (para evitar saltos abruptos)
+        self.action_timer = 0.0
+        self.action_pause = 1.8  # segundos
+
         # Sistema UNO
         self.uno_player = None  # jugador con una carta
         self.uno_predeclared = False  # Pulsó UNO antes de jugar
@@ -91,6 +94,8 @@ class Game:
         # Acumulación
         self.pending_draws = 0
         self.pending_victim = None
+        # Valor de la última carta de penalización jugada (para validar apilamiento)
+        self.last_penalty_value = 0
 
         # Robo con decisión
         self.waiting_for_decision = False
@@ -127,8 +132,31 @@ class Game:
         self.sad_opponent_rects = []  # rectángulos de los botones
         self.sad_opponent_indices = []  # índices de los oponentes
 
+        # Notificaciones visuales en pantalla
+        self.notification_text = ""
+        self.notification_timer = 0.0
+        self.notification_duration = 1.5  # segundos
+        self.notification_color = (255, 255, 255)  # blanco por defecto
+
+        # Para logs de penalización no repetitivos
+        self._last_penalty_log = None
+        # Temporizador para penalizaciones huérfanas
+        self._orphan_timer = 0.0
+
         print("[GAME] Partida iniciada. Jugadores:", [p.name for p in self.players])
         print(f"[GAME] Carta central: {self.center_card}")
+
+    def show_notification(self, text, color=(255, 255, 255), duration=2.0):
+        """Muestra una notificación en pantalla durante 'duration' segundos."""
+        self.notification_text = text
+        self.notification_color = color
+        self.notification_timer = duration
+        self.notification_duration = duration
+
+    def pause_action(self, duration=1.8):
+        """Activa una pausa visual para que el jugador vea la acción."""
+        self.action_timer = duration
+        print(f"[PAUSA] Esperando {duration:.2f} segundos...")
 
     #  Robo y mazo (se mantienen en game)
     def _apply_draw_penalty(self, hand, amount):
@@ -147,6 +175,8 @@ class Game:
             hand.append(card)
             cartas_robadas += 1
         print(f"[ROBO] Mano ahora tiene {len(hand)} cartas.")
+        # Regla Piedad: verificar si alguien superó 25 cartas
+        check_pity(self)
 
     def _reshuffle_discard(self):
         """
@@ -171,6 +201,12 @@ class Game:
 
         print(
             f"[REBARAJANDO] Se han rebarajado {len(cards_to_shuffle)} cartas del descarte."
+        )
+
+        self.show_notification(
+            f"Se rebarajaron {len(cards_to_shuffle)} cartas",
+            (255, 220, 50),  # amarillo
+            2.0,
         )
         return True
 
@@ -228,7 +264,9 @@ class Game:
         select_sad_target(self, player)
 
     def _apply_sad_effect(self, target_player):
-        apply_sad_effect(self, target_player)
+        from src.penalty_manager import apply_sad_penalty
+
+        apply_sad_penalty(self, target_player)
 
     def _apply_effect(self, player, card):
         from src.action_manager import apply_effect
@@ -318,7 +356,7 @@ class Game:
                         self.sad_opponent_indices = []
                         self.selection_timer = 0.0
                         self.pending_sad_player = None
-                        self._advance_turn()
+                        # NO llamar a self._advance_turn() aquí
                         return
                 return
 
@@ -394,17 +432,32 @@ class Game:
                     self._play_card(player, i)
                     break
 
-    #  Update (se llama cada frame)
     def update(self, dt):
         if self.game_state == "GAME_OVER":
             return
+
+        # Pausa post-acción
+        if self.action_timer > 0:
+            self.action_timer -= dt
+            if self.action_timer < 0:
+                self.action_timer = 0
+            if hasattr(self, "_last_log_time") and self.action_timer > 0:
+                if self._last_log_time - self.action_timer > 0.2:
+                    print(f"[PAUSA] Restante: {self.action_timer:.2f}s")
+                    self._last_log_time = self.action_timer
+            return
+
+        # Actualizar temporizador de notificaciones
+        if self.notification_timer > 0:
+            self.notification_timer -= dt
+            if self.notification_timer < 0:
+                self.notification_timer = 0
 
         update_uno(self, dt)
 
         # Animación del botón UNO
         if self.uno_button_pressed:
             self.uno_button_timer -= dt
-
             if self.uno_button_timer <= 0:
                 self.uno_button_pressed = False
                 self.uno_button_timer = 0.0
@@ -443,10 +496,40 @@ class Game:
                 self.sad_opponent_indices = []
                 self.selection_timer = 0.0
                 self.pending_sad_player = None
-                self._advance_turn()
+                # 🔥 NO llamar a self._advance_turn() aquí
                 return
 
-        # Penalización pendiente
+        # 🔥 Log de estado de penalización (solo cuando cambia)
+        if self.pending_draws > 0 or self.pending_victim is not None:
+            current_state = (self.pending_draws, self.pending_victim)
+            if current_state != self._last_penalty_log:
+                victim_name = "ninguno"
+                if self.pending_victim is not None and self.pending_victim < len(
+                    self.players
+                ):
+                    victim_name = self.players[self.pending_victim].name
+                print(
+                    f"[INFO] Penalización pendiente: {self.pending_draws} cartas para {victim_name}"
+                )
+                self._last_penalty_log = current_state
+
+        # 🔥 Manejo de penalizaciones huérfanas
+        if (
+            self.pending_draws > 0
+            and self.pending_victim is not None
+            and self.pending_victim != self.current_turn
+        ):
+            self._orphan_timer += dt
+            if self._orphan_timer > 2.0:
+                print(
+                    f"[FIX] Penalización huérfana: aplicando a {self.players[self.current_turn].name} (victima original era {self.players[self.pending_victim].name if self.pending_victim < len(self.players) else 'eliminado'})"
+                )
+                self.pending_victim = self.current_turn
+                self._orphan_timer = 0.0
+        else:
+            self._orphan_timer = 0.0
+
+        # 🔥 PENALIZACIÓN PENDIENTE (se ejecuta ANTES que cualquier otra acción)
         if self.pending_draws > 0 and self.pending_victim == self.current_turn:
             player = self.players[self.current_turn]
             penalty_cards = self._get_penalty_cards(player)
@@ -459,6 +542,8 @@ class Game:
                         )
                         self.waiting_for_penalty_response = True
                         self.penalty_response_timer = 0.0
+                        # 🔥 Salir del update para no repetir logs este frame
+                        return
                     else:
                         self.penalty_response_timer += dt
                         if self.penalty_response_timer >= self.penalty_response_timeout:
@@ -487,6 +572,7 @@ class Game:
         if current_player.skip_next_turn:
             current_player.skip_next_turn = False
             print(f"[TURNO] {current_player.name} pierde su turno por efecto Sad.")
+            self.pause_action(1.0)
             self._advance_turn()
             return
 
@@ -500,13 +586,16 @@ class Game:
                 self._keep_drawn_card()
                 return
 
-        # Turno de bot
+        # 🔥 Turno de bot (sin log excesivo)
         if self.current_turn != 0 and self.winner is None:
             self.bot_timer += 1
             if self.bot_timer >= 60:
                 bot = self.players[self.current_turn]
                 self._bot_play(bot)
                 self.bot_timer = 0
+
+        # Regla Piedad: verificar al final del turno
+        check_pity(self)
 
     def play_uno_sound(self):
         if self.uno_sound is not None:

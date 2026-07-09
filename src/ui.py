@@ -229,9 +229,14 @@ def draw_game(screen, game, clock):
     else:
         screen.fill(BACKGROUND)  # fallback al color rojo
 
-    # Título y turno
+    # Título y turno (mejorado: muestra el nombre)
     title = font.render("UNO NO MERCY", True, WHITE)
-    turn_text = font.render(f"TURN: {game.current_turn}", True, WHITE)
+    # Asegurar que current_turn sea válido
+    if game.current_turn < len(game.players):
+        nombre_actual = game.players[game.current_turn].name
+    else:
+        nombre_actual = "Desconocido"
+    turn_text = font.render(f"Turno: {nombre_actual}", True, WHITE)
     screen.blit(title, (20, 20))
     screen.blit(turn_text, (20, 60))
 
@@ -250,47 +255,168 @@ def draw_game(screen, game, clock):
     screen.blit(deck_text, (300, 210))
     game._deck_rect = deck_rect
 
-    # Nombres de bots (con color según turno)
-    bot_colors = [WHITE, WHITE, WHITE]
-    if game.current_turn == 1:
-        bot_colors[0] = YELLOW
-    elif game.current_turn == 2:
-        bot_colors[1] = YELLOW
-    elif game.current_turn == 3:
-        bot_colors[2] = YELLOW
+    # NOMBRES DE JUGADORES CON RESALTADO (dinámico, sin índices fijos)
+    # Posiciones de los nombres (basadas en el nombre del jugador)
+    name_positions = {
+        "Tú": (640, 490),
+        "Bot 1": (50, 300),
+        "Bot 2": (350, 70),
+        "Bot 3": (1160, 300),
+    }
 
-    bot1 = font.render("BOT 1", True, bot_colors[0])
-    bot2 = font.render("BOT 2", True, bot_colors[1])
-    bot3 = font.render("BOT 3", True, bot_colors[2])
-    screen.blit(bot1, (50, 300))
-    screen.blit(bot2, (800, 80))
-    screen.blit(bot3, (1160, 300))
+    for player in game.players:
+        nombre = player.name
+        x, y = name_positions.get(nombre, (640, 490))  # posición por defecto
 
-    # Dorsos de bots (card=None para dibujar dorso)
-    x_bot2 = 450
-    for _ in game.players[2].hand:
-        draw_card(screen, None, x_bot2, 40, 60, 90, border_radius=8, border_width=2)
-        x_bot2 += 35
+        if player == game.players[game.current_turn]:
+            # Jugador activo: nombre grande, amarillo, con icono ▶
+            texto = f"▶ {nombre}"
+            shadow_surf = font_big.render(texto, True, (200, 180, 0))
+            surf = font_big.render(texto, True, YELLOW)
+            screen.blit(shadow_surf, (x - 2, y - 2))
+            screen.blit(surf, (x, y))
+        else:
+            # Jugador inactivo: blanco normal
+            surf = font.render(nombre, True, WHITE)
+            screen.blit(surf, (x, y))
 
-    y_bot1 = 220
-    for _ in game.players[1].hand:
-        draw_card(screen, None, 150, y_bot1, 60, 90, border_radius=8, border_width=2)
-        y_bot1 += 25
+    # DORSOS DE BOTS (dinámico, basado en jugadores existentes)
+    # Configuración de posición para cada bot (por nombre)
+    bot_config = {
+        "Bot 1": {
+            "x": 150,
+            "y": 220,
+            "spacing": 25,
+            "max_size": 400,
+            "orientation": "vertical",
+        },
+        "Bot 2": {
+            "x": 450,
+            "y": 40,
+            "spacing": 35,
+            "max_size": 500,
+            "orientation": "horizontal",
+        },
+        "Bot 3": {
+            "x": 1050,
+            "y": 220,
+            "spacing": 25,
+            "max_size": 400,
+            "orientation": "vertical",
+        },
+    }
 
-    y_bot3 = 220
-    for _ in game.players[3].hand:
-        draw_card(screen, None, 1050, y_bot3, 60, 90, border_radius=8, border_width=2)
-        y_bot3 += 25
+    for player in game.players:
+        if player.name == "Tú":
+            continue  # Saltar al jugador humano
 
-    # Cartas del jugador
+        config = bot_config.get(player.name)
+        if config is None:
+            continue  # Si no está configurado, saltar
+
+        hand = player.hand
+        total = len(hand)
+        if total == 0:
+            continue
+
+        x_base = config["x"]
+        y_base = config["y"]
+        spacing = config["spacing"]
+        max_size = config["max_size"]
+
+        if config["orientation"] == "vertical":
+            if total * spacing <= max_size:
+                cols = 1
+            else:
+                cols = 2
+            if cols == 1:
+                for i in range(total):
+                    y = y_base + i * spacing
+                    draw_card(
+                        screen, None, x_base, y, 60, 90, border_radius=8, border_width=2
+                    )
+            else:
+                half = (total + 1) // 2
+                x1, x2 = x_base, x_base + 35
+                for i in range(total):
+                    y = y_base + (i % half) * spacing
+                    x = x1 if i < half else x2
+                    draw_card(
+                        screen, None, x, y, 60, 90, border_radius=8, border_width=2
+                    )
+        else:  # horizontal
+            if total * spacing <= max_size:
+                rows = 1
+            else:
+                rows = 2
+            if rows == 1:
+                for i in range(total):
+                    x = x_base + i * spacing
+                    draw_card(
+                        screen, None, x, y_base, 60, 90, border_radius=8, border_width=2
+                    )
+            else:
+                half = (total + 1) // 2
+                y1, y2 = y_base, y_base + 20
+                for i in range(total):
+                    x = x_base + (i % half) * spacing
+                    y = y1 if i < half else y2
+                    draw_card(
+                        screen, None, x, y, 60, 90, border_radius=8, border_width=2
+                    )
+    # ------------------------------------------------------------
+    # CARTAS DEL JUGADOR (CON APILAMIENTO DINÁMICO)
+    # ------------------------------------------------------------
     player = game.players[0]
-    x = 300
-    for card in player.hand:
-        card.x = x
-        card.y = 520
-        card.update_rect()
-        draw_card(screen, card, x, 520, 90, 140, border_radius=12, border_width=3)
-        x += 95
+    total = len(player.hand)
+    if total > 0:
+        x_start = 300
+        y_base = 520
+        card_width = 90
+        card_height = 140
+        max_width = 900
+        spacing = 95
+        rows = 1
+
+        # Calcular espaciado horizontal
+        if total * spacing > max_width:
+            spacing = max(45, max_width // total)  # 🔥 mínimo 45px
+            if spacing < 50:  # Si es muy pequeño, forzar dos filas
+                rows = 2
+
+        # Determinar número de filas
+        if rows == 1:
+            y_positions = [y_base]
+            per_row = [total]
+        else:
+            # 🔥 Separación vertical aumentada a 70px
+            y_positions = [y_base, y_base + 70]
+            per_row = [(total + 1) // 2, total // 2]
+
+        card_index = 0
+        for row_idx in range(rows):
+            y = y_positions[row_idx]
+            x = x_start
+            count = per_row[row_idx]
+            for _ in range(count):
+                if card_index >= total:
+                    break
+                card = player.hand[card_index]
+                card.x = x
+                card.y = y
+                card.update_rect()  # 🔥 Actualizar rectángulo de colisión
+                draw_card(
+                    screen,
+                    card,
+                    x,
+                    y,
+                    card_width,
+                    card_height,
+                    border_radius=12,
+                    border_width=3,
+                )
+                x += spacing
+                card_index += 1
 
     # -------- OVERLAYS (llamadas a ui_overlays) --------
     from src.ui_overlays import (
@@ -302,6 +428,8 @@ def draw_game(screen, game, clock):
         draw_uno_report_overlay,
         draw_uno_popup,
         draw_sad_target_selection,
+        draw_notification,
+        draw_direction_indicator,
     )
 
     draw_decision_overlay(screen, game, font, font_small)
@@ -320,17 +448,11 @@ def draw_game(screen, game, clock):
     game.uno_button_rect = pygame.Rect(1135, 575, 150, 110)
 
     if _uno_button is not None:
-
         if game.uno_button_pressed:
-
             pressed = _uno_button.copy()
-
             pressed.fill((180, 180, 180, 255), special_flags=pygame.BLEND_RGBA_MULT)
-
             screen.blit(pressed, game.uno_button_rect.topleft)
-
         else:
-
             screen.blit(_uno_button, game.uno_button_rect.topleft)
 
     # Ganador
@@ -346,6 +468,12 @@ def draw_game(screen, game, clock):
 
     # globo de texto UNO!
     draw_uno_popup(screen, game)
+
+    # Notificaciones visuales (se dibujan encima de todo)
+    draw_notification(screen, game, font_big)
+
+    # Indicador de dirección
+    draw_direction_indicator(screen, game, font)
 
     # Métricas
     fps = clock.get_fps()

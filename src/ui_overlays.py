@@ -344,3 +344,39 @@ def draw_uno_popup(screen, game):
 
         text = font.render("UNO!", True, (0, 0, 0))
         screen.blit(text, text.get_rect(center=bubble.center))
+
+
+def draw_notification(screen, game, font_big):
+    """Dibuja la notificación emergente en el centro de la pantalla."""
+    if game.notification_timer <= 0 or not game.notification_text:
+        return
+
+    # Fondo semitransparente para legibilidad
+    text_surface = font_big.render(
+        game.notification_text, True, game.notification_color
+    )
+    text_rect = text_surface.get_rect(center=(640, 360))
+
+    # Fondo negro semitransparente
+    padding = 20
+    bg_rect = text_rect.inflate(padding * 2, padding * 2)
+    bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+    bg_surface.fill((0, 0, 0, 180))
+    screen.blit(bg_surface, bg_rect.topleft)
+
+    # Borde blanco
+    pygame.draw.rect(screen, (255, 255, 255), bg_rect, 2, border_radius=8)
+
+    # Texto
+    screen.blit(text_surface, text_rect)
+
+
+def draw_direction_indicator(screen, game, font):
+    """Dibuja una flecha indicando la dirección actual del juego."""
+    direction_text = "→" if game.direction == 1 else "←"
+    color = (255, 220, 50)  # amarillo
+    text_surface = font.render(f"SENTIDO: {direction_text}", True, color)
+    # Posicionar en la zona superior derecha de la mesa (por ejemplo, cerca de la carta central)
+    x = 750
+    y = 50
+    screen.blit(text_surface, (x, y))
