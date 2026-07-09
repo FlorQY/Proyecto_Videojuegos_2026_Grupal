@@ -23,6 +23,7 @@ from src.ui import (
     draw_card,
 )
 
+
 def draw_decision_overlay(screen, game, font, font_small):
     """Dibuja la carta robada separada con botones JUGAR / GUARDAR."""
     if not (game.waiting_for_decision and game.drawn_card_temp is not None):
@@ -220,69 +221,95 @@ def draw_pending_penalty(screen, game, font):
             s.fill((0, 0, 0, 180))
             screen.blit(s, text_rect.inflate(20, 10).topleft)
             screen.blit(penalty_text, text_rect)
-            
+
+
+def draw_sad_target_selection(screen, game, font_big, font):
+    """Dibuja el menú de selección de objetivo para la carta Sad."""
+    overlay = pygame.Surface((1280, 720), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+
+    msg = font_big.render("ELIGE UN OPONENTE PARA SAD:", True, WHITE)
+    msg_rect = msg.get_rect(center=(640, 200))
+    screen.blit(msg, msg_rect)
+
+    player = game.pending_sad_player
+    opponents = []
+    for i, p in enumerate(game.players):
+        if p is not player:
+            opponents.append((i, p))
+
+    game.sad_opponent_rects = []
+    game.sad_opponent_indices = []
+    x_positions = [400, 640, 880]
+    y_pos = 320
+    width = 160
+    height = 80
+
+    for idx, (i, p) in enumerate(opponents):
+        x = x_positions[idx]
+        rect = pygame.Rect(x - width // 2, y_pos, width, height)
+
+        if game.current_turn == i:
+            color = YELLOW
+        else:
+            color = GRAY
+
+        pygame.draw.rect(screen, color, rect, border_radius=10)
+        pygame.draw.rect(screen, WHITE, rect, 3, border_radius=10)
+
+        name_text = font.render(p.name, True, BLACK if color == YELLOW else WHITE)
+        name_rect = name_text.get_rect(center=(x, y_pos + 40))
+        screen.blit(name_text, name_rect)
+
+        game.sad_opponent_rects.append(rect)
+        game.sad_opponent_indices.append(i)
+
+    remaining = max(0, game.selection_timeout - game.selection_timer)
+    timer_text = font.render(f"Tiempo: {remaining:.1f}s", True, WHITE)
+    screen.blit(timer_text, (640, 480))
+
+
 def draw_uno_report_overlay(screen, game):
     if not game.denounce_window_open:
         return
-    
+
     overlay = pygame.Surface((1280, 720), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 160))
     screen.blit(overlay, (0, 0))
 
     box = pygame.Rect(390, 180, 500, 280)
 
-    pygame.draw.rect(screen, (245,245,245), box, border_radius=15)
-    pygame.draw.rect(screen, (40,40,40), box, 3, border_radius=15)
-    
+    pygame.draw.rect(screen, (245, 245, 245), box, border_radius=15)
+    pygame.draw.rect(screen, (40, 40, 40), box, 3, border_radius=15)
+
     font_title = pygame.font.SysFont("arial", 34, bold=True)
     font = pygame.font.SysFont("arial", 26)
-    
-    text = font_title.render("¡¡DENUNCIA!!", True, (200,30,30))
-    screen.blit(text, text.get_rect(center=(640,230)))
-    
+
+    text = font_title.render("¡¡DENUNCIA!!", True, (200, 30, 30))
+    screen.blit(text, text.get_rect(center=(640, 230)))
+
     player_text = font.render(
-    f"{game.denounce_player.name} olvidó decir UNO",
-    True,
-    (20,20,20)
+        f"{game.denounce_player.name} olvidó decir UNO", True, (20, 20, 20)
     )
 
-    screen.blit(player_text, player_text.get_rect(center=(640,290)))
-    
-    remaining = max(
-    0,
-    game.denounce_timeout - game.denounce_timer
-    )
-    timer = font.render(
-        f"Tiempo: {remaining:.1f}s",
-        True,
-        (20,20,20)
-    )
+    screen.blit(player_text, player_text.get_rect(center=(640, 290)))
 
-    screen.blit(timer, timer.get_rect(center=(640,340)))
-    
+    remaining = max(0, game.denounce_timeout - game.denounce_timer)
+    timer = font.render(f"Tiempo: {remaining:.1f}s", True, (20, 20, 20))
+
+    screen.blit(timer, timer.get_rect(center=(640, 340)))
+
     game.btn_denounce_rect = pygame.Rect(540, 390, 200, 60)
-    
-    pygame.draw.rect(
-    screen,
-    (210,60,60),
-    game.btn_denounce_rect,
-    border_radius=10
-    )
 
-    pygame.draw.rect(
-        screen,
-        (40,40,40),
-        game.btn_denounce_rect,
-        2,
-        border_radius=10
-    )
-    
-    txt = font.render("DENUNCIAR", True, (255,255,255))
+    pygame.draw.rect(screen, (210, 60, 60), game.btn_denounce_rect, border_radius=10)
 
-    screen.blit(
-        txt,
-        txt.get_rect(center=game.btn_denounce_rect.center)
-    )
+    pygame.draw.rect(screen, (40, 40, 40), game.btn_denounce_rect, 2, border_radius=10)
+
+    txt = font.render("DENUNCIAR", True, (255, 255, 255))
+
+    screen.blit(txt, txt.get_rect(center=game.btn_denounce_rect.center))
+
 
 def draw_uno_popup(screen, game):
     """
@@ -292,10 +319,10 @@ def draw_uno_popup(screen, game):
     """
 
     positions = {
-        0: (140, 580),    # Tú
-        1: (45, 340),     # Bot 1
-        2: (290, 60),    # Bot 2
-        3: (1160, 340),   # Bot 3
+        0: (140, 580),  # Tú
+        1: (45, 340),  # Bot 1
+        2: (290, 60),  # Bot 2
+        3: (1160, 340),  # Bot 3
     }
 
     font = pygame.font.SysFont("arial", 24, bold=True)

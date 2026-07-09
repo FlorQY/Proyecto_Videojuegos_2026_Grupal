@@ -3,12 +3,12 @@ Inteligencia artificial de los bots.
 Todas las funciones reciben `game` como primer argumento.
 """
 
-from src.rules import is_valid_play
+from src.rules import is_valid_play, get_effect
 from src.turn_manager import advance_turn
 
 
 def bot_play(game, player):
-    """Lógica de juego para un bot: elige carta válida o roba."""
+    """Lógica de juego para un bot: elige carta válida con prioridad estratégica."""
     print(f"[BOT] Turno de {player.name}")
 
     valid_indices = []
@@ -17,15 +17,44 @@ def bot_play(game, player):
             valid_indices.append(i)
 
     if valid_indices:
-        index = valid_indices[0]
-        print(f"[BOT] {player.name} juega {player.hand[index]}")
+        # Clasificar cartas válidas por prioridad
+        # Prioridad: comodines > acciones > numéricas
+        wild_cards = []
+        action_cards = []
+        number_cards = []
+
+        for idx in valid_indices:
+            card = player.hand[idx]
+            if card.color == "Wild":
+                wild_cards.append(idx)
+            elif get_effect(card) is not None:
+                action_cards.append(idx)
+            else:
+                number_cards.append(idx)
+
+        # Elegir según prioridad
+        if wild_cards:
+            chosen_idx = wild_cards[0]
+            print(f"[BOT] {player.name} elige comodín: {player.hand[chosen_idx]}")
+        elif action_cards:
+            chosen_idx = action_cards[0]
+            print(
+                f"[BOT] {player.name} elige carta de acción: {player.hand[chosen_idx]}"
+            )
+        else:
+            chosen_idx = number_cards[0]
+            print(
+                f"[BOT] {player.name} elige carta numérica: {player.hand[chosen_idx]}"
+            )
+
         # Importación local para evitar circularidad
         from src.action_manager import play_card
 
-        play_card(game, player, index)
+        play_card(game, player, chosen_idx)
         return
 
-    print(f"[BOT] {player.name} no tiene carta valida, roba.")
+    # No tiene carta válida: roba
+    print(f"[BOT] {player.name} no tiene carta válida, roba.")
     if len(game.deck.cards) > 0:
         drawn = player.draw_card(game.deck)
         if drawn is not None:

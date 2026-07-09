@@ -16,6 +16,8 @@ from src.action_manager import (
     select_color,
     apply_color_and_continue,
     apply_swap,
+    select_sad_target,
+    apply_sad_effect,
 )
 from src.bot_manager import bot_play
 from src.uno_manager import (
@@ -24,11 +26,11 @@ from src.uno_manager import (
     apply_uno_penalty,
 )
 
+
 class Game:
     def __init__(self):
-        # -------------------------
+
         # Sonidos
-        # -------------------------
         ruta_uno = os.path.join("assets", "sounds", "uno.wav")
 
         try:
@@ -58,32 +60,34 @@ class Game:
         self.winner = None
         self.game_state = "PLAYING"
         self.bot_timer = 0
-        
-        # Sistema UNO       
-        self.uno_player = None          # jugador con una carta
-        self.uno_predeclared = False   # Pulsó UNO antes de jugar
-        self.uno_declared = False      # Ya quedó protegido 
-        self.uno_timer = 0.0            # tiempo transcurrido
-        self.uno_timeout = 3.0          # segundos para decir UNO
-        self.uno_window_open = False    # la ventana está activa
-        self.uno_button_rect = None     # área clickeable del botón UNO
+        # Pila de descarte
+        self.discard_pile = []
+
+        # Sistema UNO
+        self.uno_player = None  # jugador con una carta
+        self.uno_predeclared = False  # Pulsó UNO antes de jugar
+        self.uno_declared = False  # Ya quedó protegido
+        self.uno_timer = 0.0  # tiempo transcurrido
+        self.uno_timeout = 3.0  # segundos para decir UNO
+        self.uno_window_open = False  # la ventana está activa
+        self.uno_button_rect = None  # área clickeable del botón UNO
         self.uno_event_active = False
-        
+
         # Denuncia de UNO
         self.denounce_player = None
         self.denounce_timer = 0.0
         self.denounce_timeout = 2.5
         self.denounce_window_open = False
         self.btn_denounce_rect = None
-        
+
         # Denuncia automática de bots
-        self.bot_denounced = False #evita que varios bots denuncien al mismo tiempo
-        self.bot_denounce_delay = 0.8 #Tiempo de reacción de los bots
-        
-        #botón uno
+        self.bot_denounced = False  # evita que varios bots denuncien al mismo tiempo
+        self.bot_denounce_delay = 0.8  # Tiempo de reacción de los bots
+
+        # botón uno
         self.uno_button_pressed = False
-        self.uno_button_timer = 0.0 
-                
+        self.uno_button_timer = 0.0
+
         # Acumulación
         self.pending_draws = 0
         self.pending_victim = None
@@ -118,28 +122,59 @@ class Game:
         self.opponent_rects = []
         self.opponent_indices = []
 
+        # Selección de objetivo para SAD
+        self.pending_sad_player = None  # jugador que jugó Sad
+        self.sad_opponent_rects = []  # rectángulos de los botones
+        self.sad_opponent_indices = []  # índices de los oponentes
+
         print("[GAME] Partida iniciada. Jugadores:", [p.name for p in self.players])
         print(f"[GAME] Carta central: {self.center_card}")
 
-    # ------------------------------------------------------------
     #  Robo y mazo (se mantienen en game)
-    # ------------------------------------------------------------
     def _apply_draw_penalty(self, hand, amount):
         print(f"[ROBO] Robando {amount} cartas...")
-        for _ in range(amount):
+        cartas_robadas = 0
+        while cartas_robadas < amount:
             card = self.deck.draw_card()
             if card is None:
-                print("[ROBO] Mazo vacío, no se pudo robar.")
-                break
+                # Intentar rebarajar el descarte
+                if self._reshuffle_discard():
+                    # Reintentar robar después del rebaraje
+                    continue
+                else:
+                    print("[ROBO] No hay cartas disponibles en mazo ni descarte.")
+                    break
             hand.append(card)
+            cartas_robadas += 1
         print(f"[ROBO] Mano ahora tiene {len(hand)} cartas.")
 
     def _reshuffle_discard(self):
-        pass  # Se implementará en bloque futuro
+        """
+        Toma todas las cartas del descarte, las baraja y las coloca en el mazo.
+        Retorna True si se rebarajaron cartas, False si no había cartas.
+        """
+        if len(self.discard_pile) == 0:
+            print("[REBARAJANDO] El descarte está vacío. No hay cartas para rebarajar.")
+            return False
 
-    # ------------------------------------------------------------
+        # Copiar y vaciar el descarte
+        cards_to_shuffle = self.discard_pile.copy()
+        self.discard_pile.clear()
+
+        # Barajar
+        import random
+
+        random.shuffle(cards_to_shuffle)
+
+        # Añadir al mazo
+        self.deck.cards.extend(cards_to_shuffle)
+
+        print(
+            f"[REBARAJANDO] Se han rebarajado {len(cards_to_shuffle)} cartas del descarte."
+        )
+        return True
+
     #  Métodos wrapper (delegan en los managers)
-    # ------------------------------------------------------------
     def _get_next_turn(self):
         from src.turn_manager import get_next_turn
 
@@ -189,6 +224,12 @@ class Game:
     def _apply_swap(self, player1, player2):
         apply_swap(self, player1, player2)
 
+    def _select_sad_target(self, player):
+        select_sad_target(self, player)
+
+    def _apply_sad_effect(self, target_player):
+        apply_sad_effect(self, target_player)
+
     def _apply_effect(self, player, card):
         from src.action_manager import apply_effect
 
@@ -205,21 +246,18 @@ class Game:
 
     def _bot_play(self, player):
         bot_play(self, player)
-        
-    # ------------------------------------------------------------
+
     #  Eventos (solo jugador humano)
-    # ------------------------------------------------------------
     def handle_event(self, event):
         if self.game_state == "GAME_OVER":
             return
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
-            
+
             # Botón UNO
-            if (
-                self.uno_button_rect is not None
-                and self.uno_button_rect.collidepoint(mouse_pos)
+            if self.uno_button_rect is not None and self.uno_button_rect.collidepoint(
+                mouse_pos
             ):
                 self.uno_button_pressed = True
                 self.uno_button_timer = 0.12
@@ -228,7 +266,7 @@ class Game:
                 return
 
             if self.current_turn != 0:
-                
+
                 # Denunciar UNO
                 if self.denounce_window_open:
 
@@ -262,6 +300,24 @@ class Game:
                         opponent = self.players[idx]
                         print(f"[INTERCAMBIO] Jugador eligió a {opponent.name}")
                         self._apply_swap(player, opponent)
+                        self._advance_turn()
+                        return
+                return
+
+            # Selección de objetivo para SAD
+            if self.game_state == "SELECTING_SAD_TARGET":
+                for rect, idx in zip(
+                    self.sad_opponent_rects, self.sad_opponent_indices
+                ):
+                    if rect.collidepoint(mouse_pos):
+                        target = self.players[idx]
+                        print(f"[SAD] Jugador eligió a {target.name} para Sad.")
+                        self._apply_sad_effect(target)
+                        self.game_state = "PLAYING"
+                        self.sad_opponent_rects = []
+                        self.sad_opponent_indices = []
+                        self.selection_timer = 0.0
+                        self.pending_sad_player = None
                         self._advance_turn()
                         return
                 return
@@ -308,25 +364,29 @@ class Game:
             # Comportamiento normal: clic en mazo o en carta
             deck_rect = pygame.Rect(280, 150, 100, 150)
             if deck_rect.collidepoint(mouse_pos):
-                if len(self.deck.cards) > 0:
-                    # 🔥 CORRECCIÓN: Obtener carta del mazo SIN añadir a la mano aún
-                    card = (
-                        self.deck.draw_card()
-                    )  # draw_card retira la carta del mazo, no la añade a la mano
-                    if card is not None:
-                        self.drawn_card_temp = card
-                        self.waiting_for_decision = True
-                        self.decision_timer = 0.0
-                        valida = (
-                            "válida"
-                            if is_valid_play(card, self.center_card)
-                            else "no válida"
-                        )
-                        print(
-                            f"[ROBO] Has robado: {card} ({valida}). Decide: JUGAR o GUARDAR."
-                        )
-                else:
-                    print("[ROBO] Mazo vacio.")
+                # Intentar robar una carta
+                card = self.deck.draw_card()
+                if card is None:
+                    # Si el mazo está vacío, intentar rebarajar
+                    if self._reshuffle_discard():
+                        card = self.deck.draw_card()
+                    if card is None:
+                        print("[ROBO] No hay cartas disponibles en mazo ni descarte.")
+                        return
+
+                # Ahora tenemos una carta (o None si no hay)
+                if card is not None:
+                    self.drawn_card_temp = card
+                    self.waiting_for_decision = True
+                    self.decision_timer = 0.0
+                    valida = (
+                        "válida"
+                        if is_valid_play(card, self.center_card)
+                        else "no válida"
+                    )
+                    print(
+                        f"[ROBO] Has robado: {card} ({valida}). Decide: JUGAR o GUARDAR."
+                    )
                 return
 
             for i, card in enumerate(player.hand):
@@ -334,15 +394,13 @@ class Game:
                     self._play_card(player, i)
                     break
 
-    # ------------------------------------------------------------
     #  Update (se llama cada frame)
-    # ------------------------------------------------------------
     def update(self, dt):
         if self.game_state == "GAME_OVER":
             return
 
         update_uno(self, dt)
-        
+
         # Animación del botón UNO
         if self.uno_button_pressed:
             self.uno_button_timer -= dt
@@ -350,7 +408,7 @@ class Game:
             if self.uno_button_timer <= 0:
                 self.uno_button_pressed = False
                 self.uno_button_timer = 0.0
-                
+
         # Temporizador selección de color
         if self.game_state == "SELECTING_COLOR":
             self.selection_timer += dt
@@ -368,6 +426,23 @@ class Game:
                 chosen = min(opponents, key=lambda p: len(p.hand))
                 print(f"[INTERCAMBIO] Tiempo agotado. Intercambiando con {chosen.name}")
                 self._apply_swap(player, chosen)
+                self._advance_turn()
+                return
+
+        # Temporizador selección de objetivo para SAD
+        if self.game_state == "SELECTING_SAD_TARGET":
+            self.selection_timer += dt
+            if self.selection_timer >= self.selection_timeout:
+                player = self.pending_sad_player
+                opponents = [p for p in self.players if p is not player]
+                chosen = min(opponents, key=lambda p: len(p.hand))
+                print(f"[SAD] Tiempo agotado. Eligiendo a {chosen.name} para Sad.")
+                self._apply_sad_effect(chosen)
+                self.game_state = "PLAYING"
+                self.sad_opponent_rects = []
+                self.sad_opponent_indices = []
+                self.selection_timer = 0.0
+                self.pending_sad_player = None
                 self._advance_turn()
                 return
 
@@ -407,6 +482,14 @@ class Game:
                 self._bot_respond_to_penalty()
                 return
 
+        # Verificar skip_next_turn (efecto Sad)
+        current_player = self.players[self.current_turn]
+        if current_player.skip_next_turn:
+            current_player.skip_next_turn = False
+            print(f"[TURNO] {current_player.name} pierde su turno por efecto Sad.")
+            self._advance_turn()
+            return
+
         # Temporizador de decisión (robo voluntario)
         if self.waiting_for_decision and self.current_turn == 0:
             self.decision_timer += dt
@@ -424,7 +507,7 @@ class Game:
                 bot = self.players[self.current_turn]
                 self._bot_play(bot)
                 self.bot_timer = 0
-                
+
     def play_uno_sound(self):
         if self.uno_sound is not None:
             self.uno_sound.play()

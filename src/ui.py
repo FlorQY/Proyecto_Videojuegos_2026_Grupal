@@ -7,7 +7,7 @@ from src.sprite_loader import get_scaled_sprite
 _textura_fondo = None
 _textura_fondo_cargada = False
 
-#botón uno
+# botón uno
 _uno_button = None
 _uno_button_cargado = False
 
@@ -168,6 +168,7 @@ def cargar_textura_fondo():
         print("[UI] No se encontró png, usando color rojo por defecto.")
         _textura_fondo_cargada = True
 
+
 def cargar_boton_uno():
     """Carga la imagen del botón UNO."""
     global _uno_button, _uno_button_cargado
@@ -200,6 +201,8 @@ def cargar_boton_uno():
         print("[UI] No se encontró uno_button.png")
 
         _uno_button_cargado = True
+
+
 def draw_game(screen, game, clock):
     # PRINT DE DEPURACIÓN (solo una vez)
     if not hasattr(draw_game, "_init"):
@@ -298,6 +301,7 @@ def draw_game(screen, game, clock):
         draw_pending_penalty,
         draw_uno_report_overlay,
         draw_uno_popup,
+        draw_sad_target_selection,
     )
 
     draw_decision_overlay(screen, game, font, font_small)
@@ -309,6 +313,9 @@ def draw_game(screen, game, clock):
     if game.game_state == "SELECTING_OPPONENT":
         draw_opponent_selection(screen, game, font_big, font)
 
+    if game.game_state == "SELECTING_SAD_TARGET":
+        draw_sad_target_selection(screen, game, font_big, font)
+
     # Botón UNO
     game.uno_button_rect = pygame.Rect(1135, 575, 150, 110)
 
@@ -318,10 +325,7 @@ def draw_game(screen, game, clock):
 
             pressed = _uno_button.copy()
 
-            pressed.fill(
-                (180, 180, 180, 255),
-                special_flags=pygame.BLEND_RGBA_MULT
-            )
+            pressed.fill((180, 180, 180, 255), special_flags=pygame.BLEND_RGBA_MULT)
 
             screen.blit(pressed, game.uno_button_rect.topleft)
 
@@ -336,13 +340,13 @@ def draw_game(screen, game, clock):
 
     # Penalización pendiente (indicador general)
     draw_pending_penalty(screen, game, font)
-    
+
     # Ventana de denuncia UNO
     draw_uno_report_overlay(screen, game)
-    
-    #globo de texto UNO!
+
+    # globo de texto UNO!
     draw_uno_popup(screen, game)
-      
+
     # Métricas
     fps = clock.get_fps()
     if fps > 0:

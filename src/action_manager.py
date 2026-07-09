@@ -41,6 +41,7 @@ def apply_swap(game, player1, player2):
 
 
 def select_opponent(game, player):
+    """Inicia la selección de oponente para intercambio (carta 7)."""
     if player.is_human:
         game.pending_swap_player = player
         game.game_state = "SELECTING_OPPONENT"
@@ -53,6 +54,58 @@ def select_opponent(game, player):
         print(f"[INTERCAMBIO] {player.name} intercambia con {chosen.name}")
         apply_swap(game, player, chosen)
         # FIX: Avanzar turno para que el bot no repita el turno
+        from src.turn_manager import advance_turn
+
+        advance_turn(game)
+
+
+def apply_sad_effect(game, target_player):
+    """
+    Aplica el efecto de la carta Sad sobre el jugador objetivo:
+    - Acumula 2 cartas de penalización.
+    - Marca el flag skip_next_turn para que pierda su próximo turno.
+    """
+    target_index = game.players.index(target_player)
+
+    # 1. Acumular penalización de 2 cartas
+    from src.penalty_manager import apply_pending_penalty
+
+    if game.pending_draws > 0 and game.pending_victim == target_index:
+        game.pending_draws += 2
+        print(
+            f"[SAD] Se acumulan 2 cartas a {target_player.name}. Total: {game.pending_draws}"
+        )
+    else:
+        # Si hay penalización para otro, aplicar primero
+        if game.pending_draws > 0:
+            print("[SAD] Había penalización para otro, se aplica ahora.")
+            apply_pending_penalty(game)
+        game.pending_draws = 2
+        game.pending_victim = target_index
+        print(f"[SAD] Nueva penalización de 2 cartas para {target_player.name}")
+
+    # 2. Marcar para saltar su próximo turno
+    target_player.skip_next_turn = True
+    print(f"[SAD] {target_player.name} perderá su próximo turno.")
+
+
+def select_sad_target(game, player):
+    """
+    Inicia la selección del objetivo de la carta Sad.
+    Para humanos: abre un menú.
+    Para bots: elige al oponente con menos cartas.
+    """
+    if player.is_human:
+        game.pending_sad_player = player
+        game.game_state = "SELECTING_SAD_TARGET"
+        game.selection_timer = 0.0
+        print("[SAD] Jugador humano debe elegir oponente para Sad.")
+    else:
+        # Bot: elige al oponente con menos cartas
+        opponents = [p for p in game.players if p is not player]
+        chosen = min(opponents, key=lambda p: len(p.hand))
+        print(f"[SAD] {player.name} elige a {chosen.name} para Sad.")
+        apply_sad_effect(game, chosen)
         from src.turn_manager import advance_turn
 
         advance_turn(game)
@@ -99,6 +152,9 @@ def apply_color_and_continue(game, chosen_color):
     game.selection_timer = 0.0
 
     if callback == "play":
+        # Guardar la carta anterior en el descarte
+        if game.center_card is not None:
+            game.discard_pile.append(game.center_card)
         game.center_card = card
         turn_modified = apply_effect(game, player, card)
         if check_winner(game):
@@ -123,7 +179,7 @@ def apply_color_and_continue(game, chosen_color):
 
 
 def apply_effect(game, player, card):
-    """Aplica el efecto de una carta (Reverse, Skip, penalizaciones, 0, 7)."""
+    """Aplica el efecto de una carta (Reverse, Skip, penalizaciones, 0, 7, Sad)."""
     effect = get_effect(card)
     print(f"[EFECTO] Carta {card.value} jugada por {player.name}, efecto={effect}")
 
@@ -135,6 +191,11 @@ def apply_effect(game, player, card):
     if card.value == "7":
         # La selección de oponente ya se maneja en play_card
         return False
+
+    if effect == "Sad":
+        # La selección de oponente se maneja aquí después de elegir color
+        select_sad_target(game, player)
+        return True  # Indica que ya se manejó el turno (no avanzar)
 
     if effect == "Reverse":
         game.direction *= -1
@@ -186,10 +247,14 @@ def play_card(game, player, card_index):
         select_opponent(game, player)
         return True
 
+    # Guardar la carta anterior en el descarte antes de reemplazarla
+    if game.center_card is not None:
+        game.discard_pile.append(game.center_card)
+
     # Otras cartas
     game.center_card = card
     turn_modified = apply_effect(game, player, card)
-    
+
     if check_winner(game):
         return True
 
@@ -214,7 +279,7 @@ def play_drawn_card(game):
     success = play_card(game, player, idx)
     print(f"[JUGADA] Mano después de jugar: {len(player.hand)} cartas.")
 
-    # 🔥 FIX: Si la carta aún está en la mano, eliminarla (evita duplicación)
+    # FIX: Si la carta aún está en la mano, eliminarla (evita duplicación)
     if success and card in player.hand:
         player.hand.remove(card)
         print(
@@ -242,4 +307,3 @@ def keep_drawn_card(game):
     game.waiting_for_decision = False
     game.decision_timer = 0.0
     advance_turn(game)
-    
