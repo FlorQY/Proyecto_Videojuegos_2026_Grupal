@@ -19,18 +19,26 @@ def get_next_turn(game):
 
 
 def advance_turn(game):
-
     # Antes de cambiar el turno revisamos si alguien quedó con una carta
     check_uno(game)
 
-    # Reiniciar el temporizador del bot para que siempre espere
-    # cuando llegue su turno (evita que actúe demasiado rápido)
+    # Reiniciar el temporizador del bot
     game.bot_timer = 0
+
+    # LOG: estado de penalización pendiente
+    if game.pending_draws > 0 and game.pending_victim is not None:
+        victim_name = (
+            game.players[game.pending_victim].name
+            if game.pending_victim < len(game.players)
+            else "INVÁLIDO"
+        )
+        print(
+            f"[TURNO AVANCE] Penalización pendiente: {game.pending_draws} cartas para {victim_name} (current_turn={game.current_turn})"
+        )
 
     old = game.current_turn
     game.current_turn = get_next_turn(game)
     print(f"[TURNO] Avanzando: {old} -> {game.current_turn} (dir={game.direction})")
-    # Mostrar nombre y tamaño de mano del jugador que inicia turno
     current_player = game.players[game.current_turn]
     print(f"[TURNO] Turno de {current_player.name} ({len(current_player.hand)} cartas)")
 
@@ -47,43 +55,54 @@ def check_winner(game):
 
 
 def check_pity(game):
-    """
-    Elimina jugadores con 25 o más cartas (regla Piedad).
-    Retorna True si algún jugador fue eliminado.
-    """
     eliminated = []
+    human_eliminated = False
+
     for player in game.players:
         if len(player.hand) >= 25:
             eliminated.append(player)
-            print(f"[PIEDAD] {player.name} eliminado con {len(player.hand)} cartas.")
-            game.show_notification(
-                f"{player.name} eliminado (25+ cartas)", (255, 100, 100), 2.0  # rojo
-            )
+            if player.is_human:
+                human_eliminated = True
+                print(
+                    f"[PIEDAD] {player.name} eliminado con {len(player.hand)} cartas."
+                )
+                game.show_notification(
+                    f"{player.name} eliminado (25+ cartas)", (255, 100, 100), 2.0
+                )
 
+    if human_eliminated:
+        game.human_lost = True
+        game.winner = None
+        game.game_state = "GAME_OVER"
+        # Limpiar penalización pendiente si apuntaba al humano
+        if game.pending_victim is not None and game.pending_victim < len(game.players):
+            if game.players[game.pending_victim].is_human:
+                game.pending_draws = 0
+                game.pending_victim = None
+                game.last_penalty_value = 0
+        print("[GAME OVER] Has sido eliminado por Piedad.")
+        return True
+
+    # Eliminar bots
     for player in eliminated:
-        # Eliminar al jugador de la lista
         game.players.remove(player)
-        # Si solo queda un jugador, es el ganador
         if len(game.players) == 1:
             game.winner = game.players[0]
             game.game_state = "GAME_OVER"
             print(f"[VICTORIA] {game.winner.name} gana por Piedad.")
             return True
 
-    # Si se eliminó a alguien pero queda más de un jugador, ajustar turno
+    # Ajustar penalización pendiente si la víctima fue eliminada
     if eliminated:
-        # 🔥 Verificar que pending_victim sea válido (no apunte a un jugador eliminado)
         if game.pending_victim is not None:
             if game.pending_victim >= len(game.players):
+                print("[PIEDAD] La víctima de penalización fue eliminada. Limpiando.")
+                game.pending_draws = 0
                 game.pending_victim = None
-                print(
-                    "[PIEDAD] pending_victim reseteado porque el jugador fue eliminado."
-                )
+                game.last_penalty_value = 0
 
-        # Si el turno actual es un índice que ya no existe, resetear a 0
         if game.current_turn >= len(game.players):
             game.current_turn = 0
-
         print(f"[PIEDAD] Turno actual ajustado a {game.current_turn}.")
 
     return len(eliminated) > 0

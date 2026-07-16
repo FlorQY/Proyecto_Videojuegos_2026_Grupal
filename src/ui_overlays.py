@@ -203,6 +203,11 @@ def draw_opponent_selection(screen, game, font_big, font):
 def draw_pending_penalty(screen, game, font):
     """Dibuja el indicador parpadeante de penalización pendiente."""
     if game.pending_draws > 0 and game.pending_victim is not None:
+
+        # Verificar que el índice sea válido (el jugador aún existe)
+        if game.pending_victim >= len(game.players):
+            return  # no dibujar si el jugador ya no existe
+
         if game.pending_victim == 0:
             x, y = 640, 680
         elif game.pending_victim == 1:
@@ -380,3 +385,39 @@ def draw_direction_indicator(screen, game, font):
     x = 750
     y = 50
     screen.blit(text_surface, (x, y))
+
+
+def draw_roulette_color_selection(screen, game, font_big, font):
+    """Dibuja el menú de selección de color para la Ruleta de Color (la víctima elige)."""
+    overlay = pygame.Surface((1280, 720), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+
+    victim_name = (
+        game.pending_roulette_victim.name
+        if game.pending_roulette_victim
+        else "el oponente"
+    )
+    msg = font_big.render(f"ELIGE UN COLOR PARA {victim_name.upper()}:", True, WHITE)
+    msg_rect = msg.get_rect(center=(640, 200))
+    screen.blit(msg, msg_rect)
+
+    colors = ["Red", "Blue", "Green", "Yellow"]
+    x_positions = [400, 560, 720, 880]
+    y_pos = 320
+    radius = 60
+
+    game.color_rects = []
+    for i, color in enumerate(colors):
+        x = x_positions[i]
+        pygame.draw.circle(screen, COLOR_DISPLAY[color], (x, y_pos), radius)
+        pygame.draw.circle(screen, WHITE, (x, y_pos), radius, 3)
+        text = font.render(color, True, WHITE)
+        text_rect = text.get_rect(center=(x, y_pos + 90))
+        screen.blit(text, text_rect)
+        rect = pygame.Rect(x - radius, y_pos - radius, radius * 2, radius * 2)
+        game.color_rects.append((rect, color))
+
+    remaining = max(0, game.selection_timeout - game.selection_timer)
+    timer_text = font.render(f"Tiempo: {remaining:.1f}s", True, WHITE)
+    screen.blit(timer_text, (640, 480))

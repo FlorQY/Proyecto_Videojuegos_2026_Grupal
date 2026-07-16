@@ -170,11 +170,17 @@ def declare_uno(game):
     2. Después de jugar (si ya tiene 1 carta y sigue abierta la ventana de denuncia).
     """
 
-    player = game.players[0]
+    # Buscar al jugador humano real (por si acaso)
+    player = None
+    for p in game.players:
+        if p.is_human:
+            player = p
+            break
+    if player is None:
+        print("[UNO] No hay jugador humano, no se puede declarar UNO.")
+        return
 
-    # ---------------------------------
     # Caso A: declaración anticipada
-    # ---------------------------------
     if len(player.hand) == 2:
 
         can_play = any(is_valid_play(card, game.center_card) for card in player.hand)
@@ -190,9 +196,7 @@ def declare_uno(game):
 
         return
 
-    # ---------------------------------
     # Caso B: declaración después de jugar
-    # ---------------------------------
     if (
         len(player.hand) == 1
         and game.denounce_window_open

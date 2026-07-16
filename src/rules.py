@@ -10,7 +10,18 @@ def get_effect(card):
     Devuelve el tipo de efecto de la carta.
     Si no tiene efecto especial, devuelve None.
     """
-    specials = ["Reverse", "Skip", "+2", "+4", "+4 Reverse", "+6", "+10", "Sad"]
+    specials = [
+        "Reverse",
+        "Skip",
+        "+2",
+        "+4",
+        "+4 Reverse",
+        "+6",
+        "+10",
+        "Color Roulette",
+        "Discard",
+        "PlayAgain",
+    ]
     if card.value in specials:
         return card.value
     return None

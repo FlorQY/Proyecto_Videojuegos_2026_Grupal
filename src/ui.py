@@ -11,6 +11,22 @@ _textura_fondo_cargada = False
 _uno_button = None
 _uno_button_cargado = False
 
+# Dorso de carta y mazo
+_dorso_sprite = None
+_dorso_cargado = False
+_mazo_sprite = None
+_mazo_cargado = False
+
+_menu_fondo = None
+_menu_fondo_cargada = False
+
+# Imagen de las Reglas
+_rules_image = None
+_rules_image_loaded = False
+_rules_image_height = 0
+_rules_image_width = 0
+MENU_RED = (200, 0, 0)
+
 # Colores y constantes
 BACKGROUND = (120, 0, 0)
 BLACK = (0, 0, 0)
@@ -68,26 +84,46 @@ def draw_card(
     """
     # Si card es None, dibujar dorso
     if card is None:
-        if shadow:
-            shadow_rect = pygame.Rect(x + 3, y + 3, width, height)
-            pygame.draw.rect(
-                screen, (0, 0, 0, 50), shadow_rect, border_radius=border_radius
-            )
-        pygame.draw.rect(
-            screen, (20, 20, 20), (x, y, width, height), border_radius=border_radius
-        )
-        if border_width > 0:
-            pygame.draw.rect(
-                screen,
-                WHITE,
-                (x, y, width, height),
-                border_width,
-                border_radius=border_radius,
-            )
-        return
+        global _dorso_sprite, _dorso_cargado
+        if not _dorso_cargado:
+            cargar_dorso()
 
-    # Intentar cargar el sprite
-    sprite = get_scaled_sprite(card, width, height)
+        if _dorso_sprite is not None:
+            # Escalar el sprite al tamaño deseado
+            scaled_dorso = pygame.transform.smoothscale(_dorso_sprite, (width, height))
+            if shadow:
+                shadow_rect = pygame.Rect(x + 3, y + 3, width, height)
+                pygame.draw.rect(
+                    screen, (0, 0, 0, 50), shadow_rect, border_radius=border_radius
+                )
+            screen.blit(scaled_dorso, (x, y))
+            return
+        else:
+            # Fallback: rectángulo negro con borde blanco
+            if shadow:
+                shadow_rect = pygame.Rect(x + 3, y + 3, width, height)
+                pygame.draw.rect(
+                    screen, (0, 0, 0, 50), shadow_rect, border_radius=border_radius
+                )
+            pygame.draw.rect(
+                screen, (20, 20, 20), (x, y, width, height), border_radius=border_radius
+            )
+            if border_width > 0:
+                pygame.draw.rect(
+                    screen,
+                    WHITE,
+                    (x, y, width, height),
+                    border_width,
+                    border_radius=border_radius,
+                )
+            return
+
+    # Si la carta es un comodín (valor especial), usar sprite de comodín con color "Wild"
+    wild_values = ["+4 Reverse", "+6", "+10", "Color Roulette"]
+    if card.value in wild_values:
+        sprite = get_scaled_sprite(card, width, height, force_color="Wild")
+    else:
+        sprite = get_scaled_sprite(card, width, height)
 
     if sprite is not None:
         # PRINT DE DEPURACIÓN: Sprite encontrado y dibujado
@@ -203,6 +239,74 @@ def cargar_boton_uno():
         _uno_button_cargado = True
 
 
+def cargar_dorso():
+    global _dorso_sprite, _dorso_cargado
+    if _dorso_cargado:
+        return
+
+    ruta = os.path.join("assets", "img", "cards", "carta_volteada.png")
+    if os.path.exists(ruta):
+        try:
+            img = pygame.image.load(ruta).convert_alpha()
+            # Aplicar redondeo de esquinas (opcional)
+            from src.sprite_loader import _round_corners
+
+            _dorso_sprite = _round_corners(img, 10)
+            _dorso_cargado = True
+            print("[UI] Dorso de carta cargado.")
+        except Exception as e:
+            print(f"[UI] Error cargando dorso: {e}")
+            _dorso_cargado = True
+    else:
+        print("[UI] No se encontró carta_volteada.png, usando rectángulo negro.")
+        _dorso_cargado = True
+
+
+def cargar_mazo():
+    """Carga la imagen del mazo y aplica bordes redondeados."""
+    global _mazo_sprite, _mazo_cargado
+    if _mazo_cargado:
+        return
+
+    ruta = os.path.join("assets", "img", "cards", "carta_volteada.png")
+    if os.path.exists(ruta):
+        try:
+            from src.sprite_loader import _round_corners
+
+            img = pygame.image.load(ruta).convert_alpha()
+            # Aplicar redondeo de esquinas como a las cartas normales
+            img = _round_corners(img, 10)
+            # Escalar al tamaño del mazo (100x150)
+            _mazo_sprite = pygame.transform.smoothscale(img, (100, 150))
+            _mazo_cargado = True
+            print("[UI] Mazo cargado con bordes redondeados.")
+        except Exception as e:
+            print(f"[UI] Error cargando mazo: {e}")
+            _mazo_cargado = True
+    else:
+        print("[UI] No se encontró mazo.png, usando rectángulo negro.")
+        _mazo_cargado = True
+
+
+def cargar_menu_fondo():
+    global _menu_fondo, _menu_fondo_cargada
+    if _menu_fondo_cargada:
+        return
+    ruta = os.path.join("assets", "img", "menu_bg.png")
+    if os.path.exists(ruta):
+        try:
+            img = pygame.image.load(ruta).convert()
+            _menu_fondo = pygame.transform.scale(img, (1280, 720))
+            _menu_fondo_cargada = True
+            print("[UI] Fondo de menú cargado.")
+        except Exception as e:
+            print(f"[UI] Error cargando fondo de menú: {e}")
+            _menu_fondo_cargada = True
+    else:
+        print("[UI] No se encontró menu_bg.png, usando color negro.")
+        _menu_fondo_cargada = True
+
+
 def draw_game(screen, game, clock):
     # PRINT DE DEPURACIÓN (solo una vez)
     if not hasattr(draw_game, "_init"):
@@ -248,12 +352,32 @@ def draw_game(screen, game, clock):
         screen, game.center_card, 590, 285, 100, 150, border_radius=10, border_width=3
     )
 
-    # Mazo
+    # Mazo (con efecto de pila de 3 cartas)
     deck_rect = pygame.Rect(280, 150, 100, 150)
-    pygame.draw.rect(screen, BLACK, deck_rect, border_radius=10)
-    deck_text = font.render("UNO", True, WHITE)
-    screen.blit(deck_text, (300, 210))
     game._deck_rect = deck_rect
+
+    global _mazo_sprite, _mazo_cargado
+    if not _mazo_cargado:
+        cargar_mazo()
+
+    # Función auxiliar para dibujar una carta del mazo (sprite o fallback)
+    def dibujar_carta_mazo(x, y):
+        if _mazo_sprite is not None:
+            screen.blit(_mazo_sprite, (x, y))
+        else:
+            # Fallback: rectángulo negro con borde blanco
+            pygame.draw.rect(screen, BLACK, (x, y, 100, 150), border_radius=10)
+            pygame.draw.rect(screen, WHITE, (x, y, 100, 150), 2, border_radius=10)
+            deck_text = font.render("UNO", True, WHITE)
+            screen.blit(deck_text, (x + 25, y + 55))
+
+    # Dibujar tres capas para simular pila de cartas
+    dibujar_carta_mazo(deck_rect.x - 20, deck_rect.y - 18)
+    dibujar_carta_mazo(deck_rect.x - 18, deck_rect.y - 14)
+    dibujar_carta_mazo(deck_rect.x - 14, deck_rect.y - 10)
+    dibujar_carta_mazo(deck_rect.x - 12, deck_rect.y - 8)
+    dibujar_carta_mazo(deck_rect.x - 6, deck_rect.y - 4)
+    dibujar_carta_mazo(deck_rect.x, deck_rect.y)
 
     # NOMBRES DE JUGADORES CON RESALTADO (dinámico, sin índices fijos)
     # Posiciones de los nombres (basadas en el nombre del jugador)
@@ -389,8 +513,8 @@ def draw_game(screen, game, clock):
             y_positions = [y_base]
             per_row = [total]
         else:
-            # 🔥 Separación vertical aumentada a 70px
-            y_positions = [y_base, y_base + 70]
+            # 🔥 Separación vertical aumentada a 100px para mejorar detección de clics
+            y_positions = [y_base, y_base + 100]
             per_row = [(total + 1) // 2, total // 2]
 
         card_index = 0
@@ -427,9 +551,9 @@ def draw_game(screen, game, clock):
         draw_pending_penalty,
         draw_uno_report_overlay,
         draw_uno_popup,
-        draw_sad_target_selection,
         draw_notification,
         draw_direction_indicator,
+        draw_roulette_color_selection,
     )
 
     draw_decision_overlay(screen, game, font, font_small)
@@ -441,8 +565,8 @@ def draw_game(screen, game, clock):
     if game.game_state == "SELECTING_OPPONENT":
         draw_opponent_selection(screen, game, font_big, font)
 
-    if game.game_state == "SELECTING_SAD_TARGET":
-        draw_sad_target_selection(screen, game, font_big, font)
+    if game.game_state == "SELECTING_ROULETTE_COLOR":
+        draw_roulette_color_selection(screen, game, font_big, font)
 
     # Botón UNO
     game.uno_button_rect = pygame.Rect(1135, 575, 150, 110)
@@ -455,10 +579,63 @@ def draw_game(screen, game, clock):
         else:
             screen.blit(_uno_button, game.uno_button_rect.topleft)
 
-    # Ganador
-    if game.winner is not None:
-        winner_text = font_big.render(f"{game.winner.name} WINS!", True, YELLOW)
-        screen.blit(winner_text, (560, 180))
+    # GAME OVER / VICTORIA
+    if game.game_state == "GAME_OVER":
+        # Fondo semitransparente negro que cubre toda la pantalla
+        overlay = pygame.Surface((1280, 720), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        screen.blit(overlay, (0, 0))
+
+        # Determinar mensaje y color según el estado
+        if game.human_lost:
+            msg = "¡GAME OVER! Has sido eliminado."
+            color = RED
+        elif game.winner is not None:
+            if game.winner.is_human:
+                msg = "¡FELICIDADES! ¡HAS GANADO!"
+                color = (50, 255, 50)
+            else:
+                msg = f"{game.winner.name} WINS!"
+                color = YELLOW
+        else:
+            msg = "GAME OVER"
+            color = WHITE
+
+        # Mostrar mensaje
+        game_over_text = font_big.render(msg, True, color)
+        text_rect = game_over_text.get_rect(center=(640, 180))
+        bg_rect = text_rect.inflate(40, 20)
+        s = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+        s.fill((0, 0, 0, 180))
+        screen.blit(s, bg_rect.topleft)
+        screen.blit(game_over_text, text_rect)
+
+        # ------ BOTONES DE GAME OVER ------
+        font_button = pygame.font.SysFont("arial", 28)
+        btn_width = 220
+        btn_height = 50
+        spacing = 30
+        total_width = 2 * btn_width + spacing
+        start_x = 640 - total_width // 2
+        y = 620
+
+        # Botón Reintentar
+        rect_retry = pygame.Rect(start_x, y, btn_width, btn_height)
+        pygame.draw.rect(screen, BLACK, rect_retry, border_radius=10)
+        pygame.draw.rect(screen, (200, 0, 0), rect_retry, 3, border_radius=10)
+        text_retry = font_button.render("REINTENTAR", True, (200, 0, 0))
+        text_retry_rect = text_retry.get_rect(center=rect_retry.center)
+        screen.blit(text_retry, text_retry_rect)
+        game.btn_retry_rect = rect_retry
+
+        # Botón Volver al Menú
+        rect_menu = pygame.Rect(start_x + btn_width + spacing, y, btn_width, btn_height)
+        pygame.draw.rect(screen, BLACK, rect_menu, border_radius=10)
+        pygame.draw.rect(screen, (200, 0, 0), rect_menu, 3, border_radius=10)
+        text_menu = font_button.render("VOLVER AL MENÚ", True, (200, 0, 0))
+        text_menu_rect = text_menu.get_rect(center=rect_menu.center)
+        screen.blit(text_menu, text_menu_rect)
+        game.btn_menu_rect = rect_menu
 
     # Penalización pendiente (indicador general)
     draw_pending_penalty(screen, game, font)
@@ -490,3 +667,126 @@ def draw_game(screen, game, clock):
     screen.blit(fps_text, (950, 20))
     screen.blit(frame_text, (950, 50))
     screen.blit(ram_text, (950, 80))
+
+
+def draw_menu(screen):
+    global _menu_fondo, _menu_fondo_cargada
+    if not _menu_fondo_cargada:
+        cargar_menu_fondo()
+
+    if _menu_fondo is not None:
+        screen.blit(_menu_fondo, (0, 0))
+    else:
+        screen.fill((0, 0, 0))  # negro como fallback
+
+    font_button = pygame.font.SysFont("arial", 36)
+
+    button_width = 250
+    button_height = 60
+    spacing = 25
+    start_y = 300
+
+    # Nueva Partida
+    rect_nueva = pygame.Rect(
+        640 - button_width // 2, start_y, button_width, button_height
+    )
+    pygame.draw.rect(screen, BLACK, rect_nueva, border_radius=10)
+    pygame.draw.rect(screen, MENU_RED, rect_nueva, 3, border_radius=10)
+    text_nueva = font_button.render("NUEVA PARTIDA", True, MENU_RED)
+    text_nueva_rect = text_nueva.get_rect(center=rect_nueva.center)
+    screen.blit(text_nueva, text_nueva_rect)
+
+    # Reglas
+    rect_reglas = pygame.Rect(
+        640 - button_width // 2,
+        start_y + button_height + spacing,
+        button_width,
+        button_height,
+    )
+    pygame.draw.rect(screen, BLACK, rect_reglas, border_radius=10)
+    pygame.draw.rect(screen, MENU_RED, rect_reglas, 3, border_radius=10)
+    text_reglas = font_button.render("REGLAS", True, MENU_RED)
+    text_reglas_rect = text_reglas.get_rect(center=rect_reglas.center)
+    screen.blit(text_reglas, text_reglas_rect)
+
+    # Salir
+    rect_salir = pygame.Rect(
+        640 - button_width // 2,
+        start_y + 2 * (button_height + spacing),
+        button_width,
+        button_height,
+    )
+    pygame.draw.rect(screen, BLACK, rect_salir, border_radius=10)
+    pygame.draw.rect(screen, MENU_RED, rect_salir, 3, border_radius=10)
+    text_salir = font_button.render("SALIR", True, MENU_RED)
+    text_salir_rect = text_salir.get_rect(center=rect_salir.center)
+    screen.blit(text_salir, text_salir_rect)
+
+    return (rect_nueva, rect_reglas, rect_salir)
+
+
+def draw_rules(screen, scroll_y):
+    global _rules_image, _rules_image_loaded, _rules_image_height, _rules_image_width
+    global _menu_fondo, _menu_fondo_cargada
+
+    if not _menu_fondo_cargada:
+        cargar_menu_fondo()
+
+    if _menu_fondo is not None:
+        screen.blit(_menu_fondo, (0, 0))
+    else:
+        screen.fill((0, 0, 0))  # Fondo negro para menú
+
+    if not _rules_image_loaded:
+        ruta = os.path.join("assets", "img", "rules.png")
+        if os.path.exists(ruta):
+            try:
+                img = pygame.image.load(ruta).convert_alpha()
+                original_width, original_height = img.get_size()
+                # Nuevo ancho deseado (800 píxeles en lugar de 1280)
+                new_width = 800
+                scale_factor = new_width / original_width
+                new_height = int(original_height * scale_factor)
+                _rules_image = pygame.transform.smoothscale(
+                    img, (new_width, new_height)
+                )
+                _rules_image_height = new_height
+                # Guardar también el ancho para centrar
+                _rules_image_width = new_width
+            except Exception as e:
+                print(f"[UI] Error cargando reglas: {e}")
+                _rules_image = None
+                _rules_image_height = 0
+                _rules_image_width = 0
+        else:
+            _rules_image = None
+            _rules_image_height = 0
+            _rules_image_width = 0
+        _rules_image_loaded = True
+
+    if _rules_image is not None:
+        max_scroll = max(0, _rules_image_height - 720)
+        if scroll_y < 0:
+            scroll_y = 0
+        elif scroll_y > max_scroll:
+            scroll_y = max_scroll
+
+        visible_rect = pygame.Rect(0, scroll_y, _rules_image_width, 720)
+        # Centrar horizontalmente
+        x_offset = (1280 - _rules_image_width) // 2
+        screen.blit(_rules_image, (x_offset, 0), visible_rect)
+    else:
+        font_error = pygame.font.SysFont("arial", 40)
+        error_text = font_error.render("No se encontró la imagen de reglas.", True, RED)
+        error_rect = error_text.get_rect(center=(640, 360))
+        screen.blit(error_text, error_rect)
+
+    font_button = pygame.font.SysFont("arial", 30)
+    rect_volver = pygame.Rect(1100, 650, 160, 50)
+    pygame.draw.rect(screen, BLACK, rect_volver, border_radius=10)
+    pygame.draw.rect(screen, MENU_RED, rect_volver, 3, border_radius=10)
+    text_volver = font_button.render("VOLVER", True, MENU_RED)
+    text_volver_rect = text_volver.get_rect(center=rect_volver.center)
+    screen.blit(text_volver, text_volver_rect)
+
+    return rect_volver, scroll_y

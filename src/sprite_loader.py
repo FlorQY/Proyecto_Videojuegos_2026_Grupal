@@ -35,7 +35,8 @@ VALUE_TO_SPANISH = {
     "+4 Reverse": "mas4reversa",
     "+6": "mas6",
     "+10": "mas10",
-    "Sad": "triste",
+    "Color Roulette": "ruleta_color",
+    "Discard": "tirarcolor",
 }
 
 # Mapeo de colores en inglés a español
@@ -142,27 +143,40 @@ def get_sprite(card):
 
     sprite = _sprites.get(filename)
 
-    # PRINT DE DEPURACIÓN (solo para verificar)
-    # if sprite is not None:
-    #     print(f"[SPRITES] Sprite encontrado: {filename}")
-    # else:
-    # Intentar con nombre en inglés
-    #    if card.color != "Wild":
-    #        filename_en = f"{card.color}_{card.value}"
-    #        sprite = _sprites.get(filename_en)
-    #        if sprite is not None:
-    #            print(f"[SPRITES] Sprite encontrado (inglés): {filename_en}")
-    #        else:
-    #            print(f"[SPRITES] No encontrado: {filename} (usando fallback)")
-
     return sprite
 
 
-def get_scaled_sprite(card, width, height):
+def get_sprite_with_color(card, force_color=None):
+    """
+    Devuelve la imagen correspondiente a una carta, con color forzado si se especifica.
+    """
+    global _sprites
+    if not _sprites_loaded:
+        load_sprites()
+
+    if card is None:
+        return None
+
+    # Determinar color a usar
+    if force_color is not None:
+        color_es = COLOR_TO_SPANISH.get(force_color, force_color.lower())
+    else:
+        if card.color == "Wild":
+            color_es = "comodin"
+        else:
+            color_es = COLOR_TO_SPANISH.get(card.color, card.color.lower())
+
+    value_es = VALUE_TO_SPANISH.get(card.value, card.value)
+    filename = f"{color_es}_{value_es}"
+    return _sprites.get(filename)
+
+
+def get_scaled_sprite(card, width, height, force_color=None):
     """
     Devuelve la imagen de la carta escalada al tamaño deseado.
+    Si force_color se especifica, se usa ese color en lugar del color de la carta.
     """
-    sprite = get_sprite(card)
+    sprite = get_sprite_with_color(card, force_color)
     if sprite is None:
         return None
     return pygame.transform.smoothscale(sprite, (width, height))

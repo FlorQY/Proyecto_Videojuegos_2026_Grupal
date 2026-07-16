@@ -16,7 +16,6 @@ from src.action_manager import (
     select_color,
     apply_color_and_continue,
     apply_swap,
-    select_sad_target,
 )
 from src.bot_manager import bot_play
 from src.uno_manager import (
@@ -38,6 +37,16 @@ class Game:
         except Exception as e:
             print(f"[SONIDO] Error cargando uno.wav: {e}")
             self.uno_sound = None
+
+        # Sonido de carta
+        ruta_card = os.path.join("assets", "sounds", "card_sound.mp3")
+        try:
+            self.card_sound = pygame.mixer.Sound(ruta_card)
+            print("[SONIDO] card_sound.mp3 cargado correctamente.")
+        except Exception as e:
+            print(f"[SONIDO] Error cargando card_sound.mp3: {e}")
+            self.card_sound = None
+
         print("[GAME] Inicializando partida...")
         self.deck = Deck()
         self.players = [
@@ -91,6 +100,11 @@ class Game:
         self.uno_button_pressed = False
         self.uno_button_timer = 0.0
 
+        # Botones de Game Over
+        self.btn_retry_rect = None
+        self.btn_menu_rect = None
+        self.return_to_menu = False
+
         # Acumulación
         self.pending_draws = 0
         self.pending_victim = None
@@ -127,10 +141,8 @@ class Game:
         self.opponent_rects = []
         self.opponent_indices = []
 
-        # Selección de objetivo para SAD
-        self.pending_sad_player = None  # jugador que jugó Sad
-        self.sad_opponent_rects = []  # rectángulos de los botones
-        self.sad_opponent_indices = []  # índices de los oponentes
+        # Selección de objetivo para RULETA DE COLOR
+        self.pending_roulette_victim = None  # jugador que debe elegir color
 
         # Notificaciones visuales en pantalla
         self.notification_text = ""
@@ -142,6 +154,9 @@ class Game:
         self._last_penalty_log = None
         # Temporizador para penalizaciones huérfanas
         self._orphan_timer = 0.0
+
+        # Flag para saber si el humano perdió (por Piedad)
+        self.human_lost = False
 
         print("[GAME] Partida iniciada. Jugadores:", [p.name for p in self.players])
         print(f"[GAME] Carta central: {self.center_card}")
@@ -165,9 +180,7 @@ class Game:
         while cartas_robadas < amount:
             card = self.deck.draw_card()
             if card is None:
-                # Intentar rebarajar el descarte
                 if self._reshuffle_discard():
-                    # Reintentar robar después del rebaraje
                     continue
                 else:
                     print("[ROBO] No hay cartas disponibles en mazo ni descarte.")
@@ -175,8 +188,13 @@ class Game:
             hand.append(card)
             cartas_robadas += 1
         print(f"[ROBO] Mano ahora tiene {len(hand)} cartas.")
-        # Regla Piedad: verificar si alguien superó 25 cartas
         check_pity(self)
+        # Limpiar si pending_victim quedó inválido
+        if self.pending_victim is not None and self.pending_victim >= len(self.players):
+            print("[FIX] pending_victim inválido después de check_pity. Limpiando.")
+            self.pending_draws = 0
+            self.pending_victim = None
+            self.last_penalty_value = 0
 
     def _reshuffle_discard(self):
         """
@@ -260,14 +278,6 @@ class Game:
     def _apply_swap(self, player1, player2):
         apply_swap(self, player1, player2)
 
-    def _select_sad_target(self, player):
-        select_sad_target(self, player)
-
-    def _apply_sad_effect(self, target_player):
-        from src.penalty_manager import apply_sad_penalty
-
-        apply_sad_penalty(self, target_player)
-
     def _apply_effect(self, player, card):
         from src.action_manager import apply_effect
 
@@ -287,36 +297,48 @@ class Game:
 
     #  Eventos (solo jugador humano)
     def handle_event(self, event):
-        if self.game_state == "GAME_OVER":
-            return
-
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = pygame.mouse.get_pos()
 
-            # Botón UNO
+            # BOTONES DE GAME OVER
+            if self.game_state == "GAME_OVER":
+                if (
+                    self.btn_retry_rect is not None
+                    and self.btn_retry_rect.collidepoint(mouse_pos)
+                ):
+                    self.reset()
+                    self.game_state = "PLAYING"
+                    return
+                if self.btn_menu_rect is not None and self.btn_menu_rect.collidepoint(
+                    mouse_pos
+                ):
+                    self.return_to_menu = True
+                    self.game_state = "MENU"
+                    return
+                # Si es GAME_OVER, ignoramos cualquier otro clic
+                return
+
+            # BOTÓN UNO (solo si no está GAME_OVER)
             if self.uno_button_rect is not None and self.uno_button_rect.collidepoint(
                 mouse_pos
             ):
                 self.uno_button_pressed = True
                 self.uno_button_timer = 0.12
-
                 declare_uno(self)
                 return
 
+            # RESTO DEL CÓDIGO (sin cambios)
             if self.current_turn != 0:
-
-                # Denunciar UNO
                 if self.denounce_window_open:
-
                     if (
                         self.btn_denounce_rect is not None
                         and self.btn_denounce_rect.collidepoint(mouse_pos)
                     ):
-
+                        if self.players[self.current_turn] == self.denounce_player:
+                            print("[UNO] No puedes denunciarte a ti mismo.")
+                            return
                         print(f"[UNO] Denunciaste a {self.denounce_player.name}")
-
                         apply_uno_penalty(self)
-
                         return
                 return
 
@@ -342,21 +364,20 @@ class Game:
                         return
                 return
 
-            # Selección de objetivo para SAD
-            if self.game_state == "SELECTING_SAD_TARGET":
-                for rect, idx in zip(
-                    self.sad_opponent_rects, self.sad_opponent_indices
-                ):
+            # Selección de color para Ruleta de Color
+            if self.game_state == "SELECTING_ROULETTE_COLOR":
+                for rect, color in self.color_rects:
                     if rect.collidepoint(mouse_pos):
-                        target = self.players[idx]
-                        print(f"[SAD] Jugador eligió a {target.name} para Sad.")
-                        self._apply_sad_effect(target)
+                        print(f"[RULETA] Color elegido: {color}")
+                        from src.action_manager import execute_color_roulette
+
+                        execute_color_roulette(
+                            self, self.pending_roulette_victim, color
+                        )
                         self.game_state = "PLAYING"
-                        self.sad_opponent_rects = []
-                        self.sad_opponent_indices = []
+                        self.color_rects = []
+                        self.pending_roulette_victim = None
                         self.selection_timer = 0.0
-                        self.pending_sad_player = None
-                        # NO llamar a self._advance_turn() aquí
                         return
                 return
 
@@ -402,17 +423,14 @@ class Game:
             # Comportamiento normal: clic en mazo o en carta
             deck_rect = pygame.Rect(280, 150, 100, 150)
             if deck_rect.collidepoint(mouse_pos):
-                # Intentar robar una carta
                 card = self.deck.draw_card()
                 if card is None:
-                    # Si el mazo está vacío, intentar rebarajar
                     if self._reshuffle_discard():
                         card = self.deck.draw_card()
                     if card is None:
                         print("[ROBO] No hay cartas disponibles en mazo ni descarte.")
                         return
 
-                # Ahora tenemos una carta (o None si no hay)
                 if card is not None:
                     self.drawn_card_temp = card
                     self.waiting_for_decision = True
@@ -427,7 +445,9 @@ class Game:
                     )
                 return
 
-            for i, card in enumerate(player.hand):
+            # Recorrer en orden inverso para priorizar cartas superpuestas
+            for i in range(len(player.hand) - 1, -1, -1):
+                card = player.hand[i]
                 if card.rect.collidepoint(mouse_pos):
                     self._play_card(player, i)
                     break
@@ -482,24 +502,25 @@ class Game:
                 self._advance_turn()
                 return
 
-        # Temporizador selección de objetivo para SAD
-        if self.game_state == "SELECTING_SAD_TARGET":
+        # Temporizador selección de color para Ruleta de Color
+        if self.game_state == "SELECTING_ROULETTE_COLOR":
             self.selection_timer += dt
             if self.selection_timer >= self.selection_timeout:
-                player = self.pending_sad_player
-                opponents = [p for p in self.players if p is not player]
-                chosen = min(opponents, key=lambda p: len(p.hand))
-                print(f"[SAD] Tiempo agotado. Eligiendo a {chosen.name} para Sad.")
-                self._apply_sad_effect(chosen)
+                victim = self.pending_roulette_victim
+                # Elegir color por defecto: Rojo
+                print(
+                    f"[RULETA] Tiempo agotado. Eligiendo Rojo por defecto para {victim.name}."
+                )
+                from src.action_manager import execute_color_roulette
+
+                execute_color_roulette(self, victim, "Red")
                 self.game_state = "PLAYING"
-                self.sad_opponent_rects = []
-                self.sad_opponent_indices = []
+                self.color_rects = []
+                self.pending_roulette_victim = None
                 self.selection_timer = 0.0
-                self.pending_sad_player = None
-                # 🔥 NO llamar a self._advance_turn() aquí
                 return
 
-        # 🔥 Log de estado de penalización (solo cuando cambia)
+        # Log de estado de penalización (solo cuando cambia)
         if self.pending_draws > 0 or self.pending_victim is not None:
             current_state = (self.pending_draws, self.pending_victim)
             if current_state != self._last_penalty_log:
@@ -513,7 +534,7 @@ class Game:
                 )
                 self._last_penalty_log = current_state
 
-        # 🔥 Manejo de penalizaciones huérfanas
+        # Manejo de penalizaciones huérfanas
         if (
             self.pending_draws > 0
             and self.pending_victim is not None
@@ -529,9 +550,12 @@ class Game:
         else:
             self._orphan_timer = 0.0
 
-        # 🔥 PENALIZACIÓN PENDIENTE (se ejecuta ANTES que cualquier otra acción)
+        # PENALIZACIÓN PENDIENTE (se ejecuta ANTES que cualquier otra acción)
         if self.pending_draws > 0 and self.pending_victim == self.current_turn:
             player = self.players[self.current_turn]
+            print(
+                f"[UPDATE] Procesando penalización para {player.name} (pending_draws={self.pending_draws}, last_penalty={self.last_penalty_value})"
+            )
             penalty_cards = self._get_penalty_cards(player)
 
             if player.is_human:
@@ -542,7 +566,7 @@ class Game:
                         )
                         self.waiting_for_penalty_response = True
                         self.penalty_response_timer = 0.0
-                        # 🔥 Salir del update para no repetir logs este frame
+                        # Salir del update para no repetir logs este frame
                         return
                     else:
                         self.penalty_response_timer += dt
@@ -586,7 +610,7 @@ class Game:
                 self._keep_drawn_card()
                 return
 
-        # 🔥 Turno de bot (sin log excesivo)
+        # Turno de bot (sin log excesivo)
         if self.current_turn != 0 and self.winner is None:
             self.bot_timer += 1
             if self.bot_timer >= 60:
@@ -597,9 +621,21 @@ class Game:
         # Regla Piedad: verificar al final del turno
         check_pity(self)
 
+        # AL FINAL, limpiar si pending_victim es inválido o no hay jugadores
+        if self.pending_victim is not None and self.pending_victim >= len(self.players):
+            print("[UPDATE] pending_victim inválido. Limpiando.")
+            self.pending_draws = 0
+            self.pending_victim = None
+            self.last_penalty_value = 0
+
     def play_uno_sound(self):
         if self.uno_sound is not None:
             self.uno_sound.play()
+
+    def play_card_sound(self):
+        """Reproduce el sonido de poner una carta sobre la mesa."""
+        if self.card_sound is not None:
+            self.card_sound.play()
 
     def reset(self):
         self.__init__()
