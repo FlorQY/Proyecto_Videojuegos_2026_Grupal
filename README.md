@@ -65,41 +65,6 @@ El juego está diseñado para un **jugador humano** que compite contra **tres bo
 
 ---
 
-## Estructura del proyecto
-
-Proyecto_Videojuegos_2026_Grupal/
-├── main.py # Orquestador (menú, estados, música)
-├── requirements.txt # Dependencias
-├── assets/ # Recursos
-│   ├── img/
-│   │    ├── cards/ # Sprites de cartas (68 imágenes)
-│   │    ├── menu_bg.png # Fondo del menú
-│   │    ├── rules.png # Imagen de reglas
-│   │    └── uno_button.png # Botón UNO
-│   │
-│   └── sounds/
-│        ├── card_sound.mp3
-│        ├── game_musicwav
-│        ├── menu_music.wav
-│        └── uno.wav
-│
-└── src/ # Código fuente
-     ├── card.py # Clase Card
-     ├── deck.py # Clase Deck
-     ├── player.py # Clase Player
-     ├── rules.py # Reglas puras
-     ├── game.py # Orquestador del juego
-     ├── turn_manager.py # Turnos y victoria
-     ├── penalty_manager.py # Penalizaciones y apilamiento
-     ├── action_manager.py # Jugar cartas, efectos, 0, 7, color
-     ├── bot_manager.py # IA de bots
-     ├── uno_manager.py # Sistema UNO
-     ├── ui.py # Dibujo base
-     ├── ui_overlays.py # Pantallas emergentes
-     └── sprite_loader.py # Carga y gestión de sprites
-
----
-
 ## Cómo jugar
 
 - **Menú principal**: elige "NUEVA PARTIDA" para comenzar, "REGLAS" para ver las instrucciones, o "SALIR" para cerrar.
