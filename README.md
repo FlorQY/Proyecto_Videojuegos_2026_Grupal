@@ -65,6 +65,50 @@ El juego está diseñado para un **jugador humano** que compite contra **tres bo
 
 ---
 
+## Instalación y ejecución
+
+Sigue estos pasos para instalar y ejecutar el juego en tu máquina local:
+
+### Requisitos previos
+
+- **Python 3.11 o superior**: Descargar desde https://www.python.org/downloads/. Durante la instalación, asegúrate de marcar la opción **"Add Python to PATH"**.
+- **Git** (opcional): Solo si se quiere clonar el repositorio. Si no, se puede descargar el código como ZIP desde GitHub.
+
+### Paso a paso
+
+1. Clona el repositorio (o descarga el código fuente)
+
+- Opción con Git:
+git clone https://github.com/FlorQY/Proyecto_Videojuegos_2026_Grupal.git
+cd Proyecto_Videojuegos_2026_Grupal
+
+- Opción sin Git:
+Ir a https://github.com/FlorQY/Proyecto_Videojuegos_2026_Grupal, hacer clic en "Code" → "Download ZIP", extraer el contenido y abrir la carpeta en el terminal.
+
+2. (Opcional) Crea y activa un entorno virtual
+
+Un entorno virtual aísla las dependencias del proyecto para que no afecten a otros programas. Si no se quiere usarlo, saltar este paso.
+
+#### En Windows
+python -m venv venv
+venv\Scripts\activate
+
+#### En macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
+
+3. Instala las dependencias
+
+El proyecto necesita dos librerías: pygame (para gráficos y sonidos) y psutil (para métricas de rendimiento). El archivo requirements.txt ya las lista.
+
+pip install -r requirements.txt
+
+4. Ejecuta el juego
+
+python main.py
+
+---
+
 ## Cómo jugar
 
 - **Menú principal**: elige "NUEVA PARTIDA" para comenzar, "REGLAS" para ver las instrucciones, o "SALIR" para cerrar.
