@@ -79,8 +79,10 @@ Sigue estos pasos para instalar y ejecutar el juego en tu máquina local:
 1. Clona el repositorio (o descarga el código fuente)
 
 - Opción con Git:
+```bash
 git clone https://github.com/FlorQY/Proyecto_Videojuegos_2026_Grupal.git
 cd Proyecto_Videojuegos_2026_Grupal
+```
 
 - Opción sin Git:
 Ir a https://github.com/FlorQY/Proyecto_Videojuegos_2026_Grupal, hacer clic en "Code" → "Download ZIP", extraer el contenido y abrir la carpeta en el terminal.
@@ -90,22 +92,30 @@ Ir a https://github.com/FlorQY/Proyecto_Videojuegos_2026_Grupal, hacer clic en "
 Un entorno virtual aísla las dependencias del proyecto para que no afecten a otros programas. Si no se quiere usarlo, saltar este paso.
 
 #### En Windows
+```bash
 python -m venv venv
 venv\Scripts\activate
+```
 
 #### En macOS / Linux
+```bash
 python3 -m venv venv
 source venv/bin/activate
+```
 
 3. Instala las dependencias
 
 El proyecto necesita dos librerías: pygame (para gráficos y sonidos) y psutil (para métricas de rendimiento). El archivo requirements.txt ya las lista.
 
+```bash
 pip install -r requirements.txt
+```
 
 4. Ejecuta el juego
 
+```bash
 python main.py
+```
 
 ---
 
